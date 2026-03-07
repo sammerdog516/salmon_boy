@@ -1,0 +1,40 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "id": "columbia-mainstem",
+      "properties": {
+        "name": "Columbia Mainstem"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-123.95, 46.20],
+          [-123.10, 46.25],
+          [-122.45, 45.75],
+          [-121.55, 45.65],
+          [-120.50, 46.15]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "fraser-river",
+      "properties": {
+        "name": "Fraser River Corridor"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-123.18, 49.25],
+          [-122.95, 49.20],
+          [-122.55, 49.15],
+          [-122.15, 49.20],
+          [-121.85, 49.28]
+        ]
+      }
+    }
+  ]
+}
+
