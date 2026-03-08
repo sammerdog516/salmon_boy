@@ -34,6 +34,7 @@ def aggregate_raster_to_grid_geojson(
     thresholds: dict[str, float],
     block_size: int = 32,
     path_id: str | None = None,
+    include_non_water_blocks: bool = True,
 ) -> dict[str, Any]:
     features: list[dict[str, Any]] = []
     rows, cols = risk.shape
@@ -48,10 +49,15 @@ def aggregate_raster_to_grid_geojson(
             block_water = water_mask[row_start:row_end, col_start:col_end]
 
             valid = np.isfinite(block_risk)
-            if not np.any(valid):
+            water_pixel_count = int(np.count_nonzero(block_water))
+            if not np.any(valid) and not include_non_water_blocks:
                 continue
 
-            score = float(np.nanmean(block_risk[valid]))
+            if np.any(valid):
+                score = float(np.nanmean(block_risk[valid]))
+            else:
+                # Land/non-water-only blocks are retained to keep map coverage.
+                score = 0.0
             polygon = _block_polygon(row_start, row_end, col_start, col_end, transform)
             polygon_wgs84 = project_geometry(polygon, src_crs=crs, dst_crs="EPSG:4326")
 
@@ -60,14 +66,15 @@ def aggregate_raster_to_grid_geojson(
                 "risk_score": score,
                 "risk_category": risk_category(score, thresholds),
                 "chlorophyll_index_mean": float(np.nanmean(block_chl[block_water]))
-                if np.any(block_water)
+                if water_pixel_count > 0
                 else 0.0,
                 "turbidity_index_mean": float(np.nanmean(block_turb[block_water]))
-                if np.any(block_water)
+                if water_pixel_count > 0
                 else 0.0,
-                "water_fraction": float(np.count_nonzero(block_water)) / float(block_water.size),
+                "water_fraction": float(water_pixel_count) / float(block_water.size),
                 "pixel_count": int(block_risk.size),
-                "water_pixel_count": int(np.count_nonzero(block_water)),
+                "water_pixel_count": water_pixel_count,
+                "water_detected": bool(water_pixel_count > 0),
             }
             if path_id is not None:
                 properties["path_id"] = path_id

@@ -18,7 +18,7 @@ from app.services.processing.grid import aggregate_raster_to_grid_geojson
 from app.services.processing.indices import chlorophyll_index, ndwi_index, turbidity_index
 from app.services.processing.raster import RasterBundle, load_and_align_bands
 from app.services.processing.risk import score_risk, summarize_risk, temperature_proxy_stub
-from app.services.processing.water_mask import compute_water_mask
+from app.services.processing.water_mask import compute_water_mask_refined
 from app.services.storage.cache_manager import CacheManager
 from app.services.storage.metadata_store import MetadataStore
 from app.utils.geospatial import buffer_geometry_meters
@@ -261,7 +261,13 @@ class ProcessingService:
         chlorophyll = chlorophyll_index(b5=b5, b4=b4)
         turbidity = turbidity_index(b4=b4, b3=b3)
         ndwi = ndwi_index(b3=b3, b8=b8)
-        water_mask = compute_water_mask(ndwi=ndwi, threshold=self.settings.ndwi_water_threshold)
+        water_mask = compute_water_mask_refined(
+            ndwi=ndwi,
+            b3=b3,
+            b8=b8,
+            threshold=self.settings.ndwi_water_threshold,
+            nir_to_green_ratio_max=self.settings.water_nir_to_green_ratio_max,
+        )
         temperature = temperature_proxy_stub(chlorophyll)
 
         return {
@@ -378,7 +384,8 @@ class ProcessingService:
         if not date_source:
             date_source = datetime.now(UTC).date().isoformat()
 
-        resolution_label = f"native-g{grid_block_size}"
+        # Cache suffix bumps when grid/water detection logic changes.
+        resolution_label = f"native-g{grid_block_size}-wf2"
         if bbox is None:
             stable_assets = json.dumps(
                 {k: assets[k] for k in sorted(assets.keys())},

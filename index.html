@@ -592,15 +592,17 @@
         function styleRiskFeature(feature) {
             const props = feature?.properties || {};
             const score = Number(props.risk_score);
+            const waterFraction = Number(props.water_fraction);
+            const waterDetected = Number.isFinite(waterFraction) && waterFraction > 0;
             const category = props.risk_category || categoryFromScore(score, state.thresholds);
             const normalized = normalizedRiskForDisplay(score);
             const fillColor = colorForNormalizedRisk(normalized);
             return {
-                color: colorForCategory(category),
+                color: waterDetected ? colorForCategory(category) : "#3f3f3f",
                 weight: 1,
                 opacity: 0.9,
                 fillColor,
-                fillOpacity: 0.62
+                fillOpacity: waterDetected ? 0.62 : 0.10
             };
         }
 
@@ -621,7 +623,8 @@
                         `Category: ${props.risk_category || "n/a"}<br>` +
                         `Chlorophyll: ${Number(props.chlorophyll_index_mean ?? 0).toFixed(3)}<br>` +
                         `Turbidity: ${Number(props.turbidity_index_mean ?? 0).toFixed(3)}<br>` +
-                        `Water fraction: ${(Number(props.water_fraction ?? 0) * 100).toFixed(1)}%`
+                        `Water fraction: ${(Number(props.water_fraction ?? 0) * 100).toFixed(1)}%<br>` +
+                        `Water detected: ${(Number(props.water_fraction ?? 0) > 0) ? "yes" : "no"}`
                     );
                     layer.on("click", () => {
                         selectTile(feature, layer);
@@ -645,6 +648,8 @@
             for (const feature of features) {
                 const center = centroidFromPolygon(feature);
                 if (!center) continue;
+                const waterFraction = Number(feature?.properties?.water_fraction);
+                if (!Number.isFinite(waterFraction) || waterFraction <= 0) continue;
                 const score = Number(feature?.properties?.risk_score);
                 if (!Number.isFinite(score)) continue;
                 const normalized = normalizedRiskForDisplay(score);
@@ -802,39 +807,25 @@
         }
 
         async function fetchRuleTiles() {
-            const paramsRule = new URLSearchParams({ source: "rule" });
-            if (state.lastProcessedSceneId) {
-                paramsRule.set("processed_scene_id", state.lastProcessedSceneId);
-            }
-
             const load = async () => {
-                try {
-                    const response = await fetch(`${API_BASE}/risk/tiles?${paramsRule.toString()}`);
-                    const payload = await parseJson(response);
-                    if (payload.processed_scene_id) {
-                        state.lastProcessedSceneId = payload.processed_scene_id;
-                    }
-                    return payload;
-                } catch (error) {
-                    if (!state.sceneId) {
-                        throw error;
-                    }
-                    const processResponse = await fetch(`${API_BASE}/process/scene`, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                            scene_id: state.sceneId,
-                            include_grid: true,
-                            grid_block_size: GRID_BLOCK_SIZE
-                        })
-                    });
-                    const processPayload = await parseJson(processResponse);
-                    state.lastProcessedSceneId = processPayload.processed_scene_id;
-                    const responseTiles = await fetch(
-                        `${API_BASE}/risk/tiles?source=rule&processed_scene_id=${encodeURIComponent(state.lastProcessedSceneId)}`
-                    );
-                    return parseJson(responseTiles);
+                if (!state.sceneId) {
+                    await ingestDefaultScene();
                 }
+                const processResponse = await fetch(`${API_BASE}/process/scene`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        scene_id: state.sceneId,
+                        include_grid: true,
+                        grid_block_size: GRID_BLOCK_SIZE
+                    })
+                });
+                const processPayload = await parseJson(processResponse);
+                state.lastProcessedSceneId = processPayload.processed_scene_id;
+                const responseTiles = await fetch(
+                    `${API_BASE}/risk/tiles?source=rule&processed_scene_id=${encodeURIComponent(state.lastProcessedSceneId)}`
+                );
+                return parseJson(responseTiles);
             };
 
             try {

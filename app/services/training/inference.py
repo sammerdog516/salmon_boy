@@ -17,8 +17,8 @@ from app.services.migration.summarizer import summarize_grid_near_paths
 from app.services.processing.grid import aggregate_raster_to_grid_geojson
 from app.services.processing.indices import chlorophyll_index, ndwi_index, turbidity_index
 from app.services.processing.raster import load_and_align_bands
-from app.services.processing.risk import summarize_risk
-from app.services.processing.water_mask import compute_water_mask
+from app.services.processing.risk import normalize_risk, score_risk, summarize_risk
+from app.services.processing.water_mask import compute_water_mask_refined
 from app.services.storage.cache_manager import CacheManager
 from app.services.storage.metadata_store import MetadataStore
 from app.utils.geospatial import buffer_geometry_meters
@@ -59,6 +59,28 @@ class ModelInferenceService:
         assets = scene.get("assets")
         if not isinstance(assets, dict):
             raise ValueError(f"Scene {scene_id} has no usable asset mapping.")
+
+        # If source assets are gone (common in local/dev), serve latest cached prediction
+        # for this scene so frontend demo does not hard-fail.
+        missing_assets = [
+            (str(band), str(path))
+            for band, path in assets.items()
+            if not Path(str(path)).exists()
+        ]
+        if missing_assets:
+            cached_prediction = self._recover_latest_prediction_for_scene(
+                scene_id=scene_id,
+                include_grid=include_grid,
+                migration_path_id=migration_path_id,
+                migration_buffer_meters=migration_buffer_meters,
+            )
+            if cached_prediction is not None:
+                return cached_prediction
+            missing_text = ", ".join(f"{band}={path}" for band, path in missing_assets[:4])
+            raise FileNotFoundError(
+                "Scene assets are missing on disk and no cached prediction is available. "
+                f"Missing assets: {missing_text}. Re-ingest scene assets or restore files."
+            )
 
         resolved_checkpoint = self._resolve_model_checkpoint(model_checkpoint)
         resolved_model_id = model_id or self._model_id_from_checkpoint(resolved_checkpoint)
@@ -133,7 +155,20 @@ class ModelInferenceService:
         stack = np.stack([b3, b4, b5, b8], axis=0).astype(np.float32)
 
         ndwi = ndwi_index(b3=b3, b8=b8)
-        water_mask = compute_water_mask(ndwi=ndwi, threshold=self.settings.ndwi_water_threshold)
+        water_mask = compute_water_mask_refined(
+            ndwi=ndwi,
+            b3=b3,
+            b8=b8,
+            threshold=self.settings.ndwi_water_threshold,
+            nir_to_green_ratio_max=self.settings.water_nir_to_green_ratio_max,
+        )
+        chlorophyll = chlorophyll_index(b5=b5, b4=b4)
+        turbidity = turbidity_index(b4=b4, b3=b3)
+        _, rule_risk_norm = score_risk(
+            chlorophyll=chlorophyll,
+            turbidity=turbidity,
+            water_mask=water_mask,
+        )
         probability = self._predict_probability(
             stack=stack,
             checkpoint_path=resolved_checkpoint,
@@ -141,11 +176,13 @@ class ModelInferenceService:
             batch_size=inference_batch_size or self.settings.default_inference_batch_size,
             device=device,
         )
-        risk_normalized = probability.astype(np.float32)
+        risk_normalized, fusion_meta = self._fuse_model_and_rule_risk(
+            model_probability=probability,
+            rule_risk_norm=rule_risk_norm,
+            water_mask=water_mask,
+        )
         risk_normalized[~water_mask] = np.nan
 
-        chlorophyll = chlorophyll_index(b5=b5, b4=b4)
-        turbidity = turbidity_index(b4=b4, b3=b3)
         summary = summarize_risk(
             risk=risk_normalized,
             chlorophyll=chlorophyll,
@@ -154,6 +191,9 @@ class ModelInferenceService:
         )
         summary["model_id"] = resolved_model_id
         summary["ndwi_mean"] = float(np.nanmean(ndwi[water_mask])) if np.any(water_mask) else 0.0
+        summary["model_probability_mean"] = fusion_meta["model_probability_mean"]
+        summary["model_probability_std"] = fusion_meta["model_probability_std"]
+        summary["risk_fusion_mode"] = fusion_meta["risk_fusion_mode"]
 
         grid = (
             aggregate_raster_to_grid_geojson(
@@ -307,6 +347,55 @@ class ModelInferenceService:
             "cache_hit": True,
         }
 
+    def _recover_latest_prediction_for_scene(
+        self,
+        scene_id: str,
+        include_grid: bool,
+        migration_path_id: str | None,
+        migration_buffer_meters: float | None,
+    ) -> dict[str, Any] | None:
+        predictions = self.list_predictions(scene_id=scene_id)
+        if not predictions:
+            return None
+
+        for record in predictions:
+            artifact_paths = record.get("artifact_paths", {})
+            if not isinstance(artifact_paths, dict):
+                continue
+            grid_path = artifact_paths.get("grid_geojson")
+            if include_grid and (not grid_path or not Path(str(grid_path)).exists()):
+                continue
+
+            grid = None
+            if include_grid:
+                grid = self.load_prediction_grid(str(record.get("prediction_id")))
+
+            path_summary = None
+            if grid and migration_path_id:
+                path_feature = self.migration_service.get_path_feature(migration_path_id)
+                if path_feature is None:
+                    raise ValueError(f"Migration path not found: {migration_path_id}")
+                path_buffer = migration_buffer_meters or self.settings.default_migration_buffer_meters
+                grid, path_summary = summarize_grid_near_paths(
+                    grid_feature_collection=grid,
+                    path_features=[path_feature],
+                    buffer_meters=path_buffer,
+                    selected_path_id=migration_path_id,
+                )
+
+            return {
+                "prediction_id": str(record.get("prediction_id")),
+                "scene_id": str(record.get("scene_id") or scene_id),
+                "model_id": str(record.get("model_id") or "cached"),
+                "cache_key": str(record.get("cache_key") or ""),
+                "summary": record.get("summary", {}),
+                "artifact_paths": artifact_paths,
+                "grid": grid,
+                "path_summary": path_summary,
+                "cache_hit": True,
+            }
+        return None
+
     def _resolve_model_checkpoint(self, value: str | None) -> Path:
         if value:
             candidate = Path(value)
@@ -353,7 +442,8 @@ class ModelInferenceService:
             date_source = datetime.now(UTC).date().isoformat()
 
         model_hash = hashlib.sha1(model_id.encode("utf-8")).hexdigest()[:8]
-        resolution = f"native-g{grid_block_size}-m{model_hash}"
+        # Include pipeline tag to avoid stale cache reuse across fusion/detection updates.
+        resolution = f"native-g{grid_block_size}-m{model_hash}-wf2"
         if bbox is None:
             stable_assets = json.dumps(
                 {k: assets[k] for k in sorted(assets.keys())},
@@ -466,6 +556,42 @@ class ModelInferenceService:
             out=probability,
         )
         return np.clip(probability, 0.0, 1.0).astype(np.float32)
+
+    def _fuse_model_and_rule_risk(
+        self,
+        model_probability: np.ndarray,
+        rule_risk_norm: np.ndarray,
+        water_mask: np.ndarray,
+    ) -> tuple[np.ndarray, dict[str, float | str]]:
+        fused = np.full(model_probability.shape, np.nan, dtype=np.float32)
+        valid = water_mask & np.isfinite(model_probability)
+        if not np.any(valid):
+            return fused, {
+                "risk_fusion_mode": "no_valid_water_pixels",
+                "model_probability_mean": 0.0,
+                "model_probability_std": 0.0,
+            }
+
+        values = model_probability[valid]
+        model_mean = float(np.nanmean(values))
+        model_std = float(np.nanstd(values))
+        model_norm = normalize_risk(model_probability, valid)
+
+        # Weak labels can produce low-contrast model outputs; if spread is too small,
+        # prefer rule-based risk so frontend does not flatten into one color band.
+        if model_std < 0.02:
+            fused[valid] = rule_risk_norm[valid]
+            mode = "rule_fallback_low_model_variance"
+        else:
+            blended = 0.70 * model_norm[valid] + 0.30 * rule_risk_norm[valid]
+            fused[valid] = np.clip(blended, 0.0, 1.0)
+            mode = "model_rule_blend"
+
+        return fused.astype(np.float32), {
+            "risk_fusion_mode": mode,
+            "model_probability_mean": model_mean,
+            "model_probability_std": model_std,
+        }
 
     def _build_model(self, nn: Any) -> Any:
         class _TinySegNet(nn.Module):

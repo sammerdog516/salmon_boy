@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     model_artifacts_dir: Path = Path("artifacts/models")
 
     ndwi_water_threshold: float = 0.0
+    water_nir_to_green_ratio_max: float = 1.15
     heatmap_yellow_threshold: float = 0.30
     heatmap_red_threshold: float = 0.65
     heatmap_infrared_threshold: float = 0.85
