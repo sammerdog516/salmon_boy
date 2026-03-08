@@ -45,8 +45,11 @@ def score_risk(
     temperature_weight: float = DEFAULT_TEMPERATURE_WEIGHT,
 ) -> tuple[np.ndarray, np.ndarray]:
     temp = temperature if temperature is not None else temperature_proxy_stub(chlorophyll)
+    # Chlorophyll index can be negative (no bloom) — clip to 0 so absence of bloom
+    # doesn't cancel out turbidity signal in the weighted sum.
+    chl_positive = np.clip(chlorophyll, 0.0, None)
     risk_raw = (
-        chlorophyll_weight * chlorophyll
+        chlorophyll_weight * chl_positive
         + turbidity_weight * turbidity
         + temperature_weight * temp
     ).astype(np.float32)

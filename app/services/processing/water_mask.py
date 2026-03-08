@@ -59,7 +59,7 @@ def compute_water_mask_refined(
         awei_gate = np.isfinite(awei) & (awei > -0.02)
         mask = mask & awei_gate
 
-    return _majority_filter(mask.astype(bool), kernel_size=3, min_neighbors=5)
+    return _majority_filter(mask.astype(bool), kernel_size=3, min_neighbors=4)
 
 
 def _majority_filter(mask: np.ndarray, kernel_size: int = 3, min_neighbors: int = 5) -> np.ndarray:

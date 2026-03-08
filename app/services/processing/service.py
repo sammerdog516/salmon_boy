@@ -400,7 +400,7 @@ class ProcessingService:
         water_detector_tag = "".join(
             ch for ch in str(self.settings.water_detector_mode).lower() if ch.isalnum()
         ) or "auto"
-        resolution_label = f"native-g{grid_block_size}-wf4-{water_detector_tag}"
+        resolution_label = f"native-g{grid_block_size}-wf6-{water_detector_tag}"
         if bbox is None:
             stable_assets = json.dumps(
                 {k: assets[k] for k in sorted(assets.keys())},

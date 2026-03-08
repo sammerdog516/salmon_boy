@@ -11,7 +11,7 @@ from app.utils.bands import normalize_band_name
 
 
 class LocalSceneProvider:
-    SAMPLE_SCENE_VERSION = "v3-risk-contrast"
+    SAMPLE_SCENE_VERSION = "v6-channel"
 
     def __init__(self, project_root: Path) -> None:
         self.project_root = project_root
@@ -142,62 +142,63 @@ class LocalSceneProvider:
 
     def _bootstrap_sample_scene(self, scene_dir: Path) -> None:
         scene_dir.mkdir(parents=True, exist_ok=True)
-        seed = np.random.default_rng(42)
+        seed = np.random.default_rng(7)
         height = 512
         width = 512
         x = np.linspace(-1.0, 1.0, width, dtype=np.float32)[None, :]
         y = np.linspace(-1.0, 1.0, height, dtype=np.float32)[:, None]
 
-        # Synthetic river + estuary pattern with clear land/water contrast.
-        river = np.exp(-((y + 0.25 * x) ** 2) / 0.08).astype(np.float32)
-        estuary = np.exp(-(((x + 0.35) ** 2) + ((y - 0.10) ** 2)) / 0.12).astype(np.float32)
-        water_score = np.clip(0.65 * river + 0.75 * estuary, 0.0, 1.0)
-        water = water_score > 0.38
-        vegetation = np.clip(0.55 + 0.25 * y + 0.20 * np.sin(2.5 * x), 0.0, 1.0).astype(np.float32)
+        # Trinity Bay, NL — western shore (land) on the left, open bay water on the right.
+        # At these coordinates the western shoreline sits at roughly the scene midpoint.
+        # Irregular shoreline produced by sine perturbations for realism.
+        shore_x = -0.30 + 0.14 * np.sin(3.2 * y) + 0.06 * np.cos(5.8 * y)
+        water = (x > shore_x).astype(bool)   # ~65 % of scene is bay water
 
-        # Create bloom/turbidity hotspots so risk output is not nearly uniform.
-        bloom_hotspot = (
-            np.exp(-(((x - 0.10) ** 2) + ((y + 0.18) ** 2)) / 0.020)
-            + 0.8 * np.exp(-(((x + 0.18) ** 2) + ((y - 0.08) ** 2)) / 0.028)
+        # Vegetation gradient for land (darker land = denser spruce/fir).
+        vegetation = np.clip(0.55 + 0.20 * y - 0.20 * (x + 1.0), 0.0, 1.0).astype(np.float32)
+
+        # Algal bloom clusters — both inside the water region (x > shore).
+        # Primary bloom: centre-east bay, near where migration paths cross.
+        bloom_primary = np.exp(
+            -(((x - 0.35) ** 2) + ((y - 0.05) ** 2)) / 0.055
         ).astype(np.float32)
-        sediment_hotspot = (
-            0.9 * np.exp(-(((x + 0.30) ** 2) + ((y + 0.05) ** 2)) / 0.030)
-            + 0.7 * np.exp(-(((x - 0.25) ** 2) + ((y - 0.28) ** 2)) / 0.035)
+        # Secondary bloom: south-east bay (moderate signal).
+        bloom_secondary = (0.65 * np.exp(
+            -(((x - 0.20) ** 2) + ((y + 0.40) ** 2)) / 0.040
+        )).astype(np.float32)
+        bloom = np.clip(bloom_primary + bloom_secondary, 0.0, 1.0).astype(np.float32)
+
+        # Turbidity plume just inside the shoreline (river-mouth runoff).
+        turbid = np.exp(
+            -(((x - 0.05) ** 2) + ((y + 0.10) ** 2)) / 0.032
         ).astype(np.float32)
 
         noise = lambda scale: seed.normal(0.0, scale, size=(height, width)).astype(np.float32)
 
+        # --- Spectral values ---
+        # Ocean water: low B3/B4, very low B8 (NIR absorbed by water).
+        # Bloom drives B5 (red-edge) up sharply.
+        # Turbidity drives B4 (red) and B3 (green) up.
+        # Land: high B8 (NIR from vegetation) ensures NDWI strongly negative.
         b3 = np.where(
             water,
-            0.19
-            + 0.05 * water_score
-            - 0.06 * sediment_hotspot
-            - 0.02 * bloom_hotspot
-            + noise(0.010),
-            0.09 + 0.03 * (1.0 - vegetation) + 0.02 * (1.0 - y) + noise(0.006),
+            0.07 + 0.03 * bloom + 0.07 * turbid + noise(0.004),
+            0.10 + 0.03 * (1.0 - vegetation) + noise(0.005),
         )
         b4 = np.where(
             water,
-            0.05
-            + 0.03 * water_score
-            + 0.16 * sediment_hotspot
-            - 0.01 * bloom_hotspot
-            + noise(0.010),
-            0.12 + 0.05 * (1.0 - vegetation) + 0.02 * x + noise(0.006),
+            0.03 + 0.005 * bloom + 0.10 * turbid + noise(0.004),
+            0.12 + 0.05 * (1.0 - vegetation) + 0.02 * x + noise(0.005),
         )
         b5 = np.where(
             water,
-            0.06
-            + 0.03 * water_score
-            + 0.24 * bloom_hotspot
-            + 0.02 * sediment_hotspot
-            + noise(0.010),
-            0.16 + 0.08 * vegetation + 0.03 * (0.5 * x - 0.2 * y) + noise(0.006),
+            0.02 + 0.15 * bloom + 0.025 * turbid + noise(0.004),
+            0.16 + 0.09 * vegetation + noise(0.005),
         )
         b8 = np.where(
             water,
-            0.04 + 0.02 * (1.0 - water_score) + 0.08 * sediment_hotspot + noise(0.008),
-            0.30 + 0.14 * vegetation + 0.04 * (0.5 * x + 0.5) + noise(0.006),
+            0.010 + 0.012 * turbid + noise(0.003),
+            0.35 + 0.15 * vegetation + noise(0.006),
         )
 
         b3 = np.clip(b3, 0.001, 1.0).astype(np.float32)
@@ -213,7 +214,8 @@ class LocalSceneProvider:
                 "rasterio is required to auto-generate sample scene files."
             ) from exc
 
-        transform = from_origin(-123.2, 49.4, 0.0005, 0.0005)
+        # Trinity Bay, Newfoundland — Atlantic salmon habitat
+        transform = from_origin(-53.7, 48.6, 0.0005, 0.0005)
         profile = {
             "driver": "GTiff",
             "height": height,

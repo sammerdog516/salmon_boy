@@ -69,7 +69,7 @@ def aggregate_raster_to_grid_geojson(
                 "scene_id": scene_id,
                 "risk_score": score,
                 "risk_category": risk_category(score, thresholds),
-                "chlorophyll_index_mean": float(np.nanmean(block_chl[block_water]))
+                "chlorophyll_index_mean": max(0.0, float(np.nanmean(block_chl[block_water])))
                 if water_detected and water_pixel_count > 0
                 else 0.0,
                 "turbidity_index_mean": float(np.nanmean(block_turb[block_water]))
