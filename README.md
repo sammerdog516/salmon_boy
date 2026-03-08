@@ -88,6 +88,7 @@ app/
     geospatial.py
 scripts/
   build_dataset.py
+  pressure_test.py
   tile_dataset.py
   train.py
   infer.py
@@ -316,6 +317,22 @@ python scripts/infer.py \
   --scene-id scene-abc123 \
   --model-checkpoint artifacts/models/weakrisk_baseline/best.pt
 ```
+
+### 8) Pressure test model prediction + frontend tile path
+
+```bash
+python scripts/pressure_test.py \
+  --base-url http://127.0.0.1:8000 \
+  --scene-id scene-abc123 \
+  --model-checkpoint artifacts/models/weakrisk_baseline/best.pt \
+  --iterations 40 \
+  --concurrency 8
+```
+
+The script validates:
+- `POST /risk/predict` under concurrent load
+- `GET /risk/tiles?source=model&prediction_id=...` payload shape
+- cache hit rate and latency metrics (`p50`, `p95`)
 
 ## Environment Variables
 
