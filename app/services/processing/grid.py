@@ -35,6 +35,7 @@ def aggregate_raster_to_grid_geojson(
     block_size: int = 32,
     path_id: str | None = None,
     include_non_water_blocks: bool = True,
+    min_water_fraction_for_risk: float = 0.10,
 ) -> dict[str, Any]:
     features: list[dict[str, Any]] = []
     rows, cols = risk.shape
@@ -53,7 +54,10 @@ def aggregate_raster_to_grid_geojson(
             if not np.any(valid) and not include_non_water_blocks:
                 continue
 
-            if np.any(valid):
+            water_fraction = float(water_pixel_count) / float(block_water.size)
+            water_detected = water_fraction >= min_water_fraction_for_risk
+
+            if np.any(valid) and water_detected:
                 score = float(np.nanmean(block_risk[valid]))
             else:
                 # Land/non-water-only blocks are retained to keep map coverage.
@@ -66,15 +70,15 @@ def aggregate_raster_to_grid_geojson(
                 "risk_score": score,
                 "risk_category": risk_category(score, thresholds),
                 "chlorophyll_index_mean": float(np.nanmean(block_chl[block_water]))
-                if water_pixel_count > 0
+                if water_detected and water_pixel_count > 0
                 else 0.0,
                 "turbidity_index_mean": float(np.nanmean(block_turb[block_water]))
-                if water_pixel_count > 0
+                if water_detected and water_pixel_count > 0
                 else 0.0,
-                "water_fraction": float(water_pixel_count) / float(block_water.size),
+                "water_fraction": water_fraction,
                 "pixel_count": int(block_risk.size),
                 "water_pixel_count": water_pixel_count,
-                "water_detected": bool(water_pixel_count > 0),
+                "water_detected": bool(water_detected),
             }
             if path_id is not None:
                 properties["path_id"] = path_id

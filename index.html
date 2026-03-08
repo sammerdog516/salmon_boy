@@ -593,7 +593,9 @@
             const props = feature?.properties || {};
             const score = Number(props.risk_score);
             const waterFraction = Number(props.water_fraction);
-            const waterDetected = Number.isFinite(waterFraction) && waterFraction > 0;
+            const waterDetected = Boolean(props.water_detected)
+                && Number.isFinite(waterFraction)
+                && waterFraction > 0;
             const category = props.risk_category || categoryFromScore(score, state.thresholds);
             const normalized = normalizedRiskForDisplay(score);
             const fillColor = colorForNormalizedRisk(normalized);
@@ -624,7 +626,7 @@
                         `Chlorophyll: ${Number(props.chlorophyll_index_mean ?? 0).toFixed(3)}<br>` +
                         `Turbidity: ${Number(props.turbidity_index_mean ?? 0).toFixed(3)}<br>` +
                         `Water fraction: ${(Number(props.water_fraction ?? 0) * 100).toFixed(1)}%<br>` +
-                        `Water detected: ${(Number(props.water_fraction ?? 0) > 0) ? "yes" : "no"}`
+                        `Water detected: ${(Boolean(props.water_detected)) ? "yes" : "no"}`
                     );
                     layer.on("click", () => {
                         selectTile(feature, layer);
@@ -649,7 +651,8 @@
                 const center = centroidFromPolygon(feature);
                 if (!center) continue;
                 const waterFraction = Number(feature?.properties?.water_fraction);
-                if (!Number.isFinite(waterFraction) || waterFraction <= 0) continue;
+                const waterDetected = Boolean(feature?.properties?.water_detected);
+                if (!waterDetected || !Number.isFinite(waterFraction) || waterFraction <= 0) continue;
                 const score = Number(feature?.properties?.risk_score);
                 if (!Number.isFinite(score)) continue;
                 const normalized = normalizedRiskForDisplay(score);
@@ -848,7 +851,7 @@
                     scene_id: state.sceneId,
                     include_grid: true,
                     grid_block_size: GRID_BLOCK_SIZE,
-                    force_recompute: false
+                    force_recompute: true
                 };
                 if (state.modelCheckpoint) {
                     predictPayload.model_checkpoint = state.modelCheckpoint;

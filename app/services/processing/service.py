@@ -174,6 +174,7 @@ class ProcessingService:
                 scene_id=scene_id,
                 thresholds=self.settings.heatmap_thresholds,
                 block_size=block_size,
+                min_water_fraction_for_risk=self.settings.min_tile_water_fraction_for_risk,
             )
             if include_grid
             else None
@@ -264,9 +265,11 @@ class ProcessingService:
         water_mask = compute_water_mask_refined(
             ndwi=ndwi,
             b3=b3,
+            b4=b4,
             b8=b8,
             threshold=self.settings.ndwi_water_threshold,
             nir_to_green_ratio_max=self.settings.water_nir_to_green_ratio_max,
+            ndvi_max=self.settings.water_ndvi_max,
         )
         temperature = temperature_proxy_stub(chlorophyll)
 

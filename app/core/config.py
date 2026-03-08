@@ -39,6 +39,8 @@ class Settings(BaseSettings):
 
     ndwi_water_threshold: float = 0.0
     water_nir_to_green_ratio_max: float = 1.15
+    water_ndvi_max: float = 0.15
+    min_tile_water_fraction_for_risk: float = 0.10
     heatmap_yellow_threshold: float = 0.30
     heatmap_red_threshold: float = 0.65
     heatmap_infrared_threshold: float = 0.85

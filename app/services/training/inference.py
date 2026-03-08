@@ -68,14 +68,15 @@ class ModelInferenceService:
             if not Path(str(path)).exists()
         ]
         if missing_assets:
-            cached_prediction = self._recover_latest_prediction_for_scene(
-                scene_id=scene_id,
-                include_grid=include_grid,
-                migration_path_id=migration_path_id,
-                migration_buffer_meters=migration_buffer_meters,
-            )
-            if cached_prediction is not None:
-                return cached_prediction
+            if not force_recompute:
+                cached_prediction = self._recover_latest_prediction_for_scene(
+                    scene_id=scene_id,
+                    include_grid=include_grid,
+                    migration_path_id=migration_path_id,
+                    migration_buffer_meters=migration_buffer_meters,
+                )
+                if cached_prediction is not None:
+                    return cached_prediction
             missing_text = ", ".join(f"{band}={path}" for band, path in missing_assets[:4])
             raise FileNotFoundError(
                 "Scene assets are missing on disk and no cached prediction is available. "
@@ -158,9 +159,11 @@ class ModelInferenceService:
         water_mask = compute_water_mask_refined(
             ndwi=ndwi,
             b3=b3,
+            b4=b4,
             b8=b8,
             threshold=self.settings.ndwi_water_threshold,
             nir_to_green_ratio_max=self.settings.water_nir_to_green_ratio_max,
+            ndvi_max=self.settings.water_ndvi_max,
         )
         chlorophyll = chlorophyll_index(b5=b5, b4=b4)
         turbidity = turbidity_index(b4=b4, b3=b3)
@@ -207,6 +210,7 @@ class ModelInferenceService:
                 thresholds=self.settings.heatmap_thresholds,
                 block_size=block_size,
                 path_id=migration_path_id,
+                min_water_fraction_for_risk=self.settings.min_tile_water_fraction_for_risk,
             )
             if include_grid
             else None

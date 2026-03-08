@@ -8,12 +8,14 @@ from app.services.processing.water_mask import compute_water_mask, compute_water
 def test_refined_water_mask_applies_nir_to_green_gate() -> None:
     ndwi = np.array([[0.2, 0.2], [0.2, -0.1]], dtype=np.float32)
     b3 = np.array([[0.2, 0.2], [0.2, 0.2]], dtype=np.float32)
+    b4 = np.array([[0.15, 0.15], [0.15, 0.15]], dtype=np.float32)
     b8 = np.array([[0.15, 0.35], [0.18, 0.3]], dtype=np.float32)
 
     base = compute_water_mask(ndwi=ndwi, threshold=0.0)
     refined = compute_water_mask_refined(
         ndwi=ndwi,
         b3=b3,
+        b4=b4,
         b8=b8,
         threshold=0.0,
         nir_to_green_ratio_max=1.15,
