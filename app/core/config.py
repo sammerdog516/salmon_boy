@@ -43,6 +43,7 @@ class Settings(BaseSettings):
     min_tile_water_fraction_for_risk: float = 0.10
     water_detector_mode: str = "auto"  # spectral | pretrained | auto
     pretrained_water_model_repo_id: str = "geoai4cities/sentinel2-water-segmentation"
+    huggingface_token: str | None = None
     heatmap_yellow_threshold: float = 0.30
     heatmap_red_threshold: float = 0.65
     heatmap_infrared_threshold: float = 0.85

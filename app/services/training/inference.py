@@ -167,6 +167,7 @@ class ModelInferenceService:
             ndvi_max=self.settings.water_ndvi_max,
             mode=self.settings.water_detector_mode,
             pretrained_repo_id=self.settings.pretrained_water_model_repo_id,
+            hf_token=self.settings.huggingface_token,
         )
         water_mask = water_result.mask
         chlorophyll = chlorophyll_index(b5=b5, b4=b4)

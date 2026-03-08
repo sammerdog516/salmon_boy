@@ -228,6 +228,7 @@ Then set in `.env`:
 ```env
 WATER_DETECTOR_MODE=pretrained
 PRETRAINED_WATER_MODEL_REPO_ID=geoai4cities/sentinel2-water-segmentation
+HUGGINGFACE_TOKEN=hf_xxx_your_read_token
 ```
 
 ## API Endpoints

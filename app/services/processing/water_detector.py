@@ -30,6 +30,7 @@ def detect_water_mask(
     ndvi_max: float,
     mode: str = "auto",
     pretrained_repo_id: str | None = None,
+    hf_token: str | None = None,
 ) -> WaterDetectionResult:
     mode_normalized = (mode or "auto").strip().lower()
     spectral_mask = compute_water_mask_refined(
@@ -67,6 +68,7 @@ def detect_water_mask(
     pretrained, pretrained_error = _detect_water_with_geoai(
         bundle=bundle,
         repo_id=pretrained_repo_id or "geoai4cities/sentinel2-water-segmentation",
+        hf_token=hf_token,
     )
     if pretrained is not None:
         return pretrained
@@ -94,6 +96,7 @@ def detect_water_mask(
 def _detect_water_with_geoai(
     bundle: RasterBundle,
     repo_id: str,
+    hf_token: str | None,
 ) -> tuple[WaterDetectionResult | None, str | None]:
     run_dir = Path.cwd() / "artifacts" / "tmp" / "water_model" / f"run-{uuid4().hex[:10]}"
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -102,6 +105,9 @@ def _detect_water_with_geoai(
     os.environ["MPLCONFIGDIR"] = str(mpl_dir)
     os.environ["TMP"] = str(run_dir)
     os.environ["TEMP"] = str(run_dir)
+    os.environ.setdefault("HF_HOME", str(run_dir / "hf_home"))
+    os.environ.setdefault("HUGGINGFACE_HUB_CACHE", str(run_dir / "hf_home" / "hub"))
+    os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
 
     try:
         import rasterio
@@ -143,6 +149,7 @@ def _detect_water_with_geoai(
                 output_path=str(output_path),
                 repo_id=repo_id,
                 quiet=True,
+                token=hf_token,
             )
         except Exception as exc:
             return None, f"geoai_inference_failed: {exc}"

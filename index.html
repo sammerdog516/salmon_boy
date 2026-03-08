@@ -827,6 +827,7 @@
                 });
                 const processPayload = await parseJson(processResponse);
                 state.lastProcessedSceneId = processPayload.processed_scene_id;
+                state.waterDetectionMethod = processPayload?.summary?.water_detection_method || null;
                 const responseTiles = await fetch(
                     `${API_BASE}/risk/tiles?source=rule&processed_scene_id=${encodeURIComponent(state.lastProcessedSceneId)}`
                 );
