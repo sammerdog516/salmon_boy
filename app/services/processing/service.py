@@ -18,7 +18,7 @@ from app.services.processing.grid import aggregate_raster_to_grid_geojson
 from app.services.processing.indices import chlorophyll_index, ndwi_index, turbidity_index
 from app.services.processing.raster import RasterBundle, load_and_align_bands
 from app.services.processing.risk import score_risk, summarize_risk, temperature_proxy_stub
-from app.services.processing.water_mask import compute_water_mask_refined
+from app.services.processing.water_detector import detect_water_mask
 from app.services.storage.cache_manager import CacheManager
 from app.services.storage.metadata_store import MetadataStore
 from app.utils.geospatial import buffer_geometry_meters
@@ -162,6 +162,7 @@ class ProcessingService:
             if np.any(features["water_mask"])
             else 0.0
         )
+        summary["water_detection_method"] = str(features["water_detection_method"])
 
         grid = (
             aggregate_raster_to_grid_geojson(
@@ -262,7 +263,8 @@ class ProcessingService:
         chlorophyll = chlorophyll_index(b5=b5, b4=b4)
         turbidity = turbidity_index(b4=b4, b3=b3)
         ndwi = ndwi_index(b3=b3, b8=b8)
-        water_mask = compute_water_mask_refined(
+        water_result = detect_water_mask(
+            bundle=bundle,
             ndwi=ndwi,
             b3=b3,
             b4=b4,
@@ -270,7 +272,10 @@ class ProcessingService:
             threshold=self.settings.ndwi_water_threshold,
             nir_to_green_ratio_max=self.settings.water_nir_to_green_ratio_max,
             ndvi_max=self.settings.water_ndvi_max,
+            mode=self.settings.water_detector_mode,
+            pretrained_repo_id=self.settings.pretrained_water_model_repo_id,
         )
+        water_mask = water_result.mask
         temperature = temperature_proxy_stub(chlorophyll)
 
         return {
@@ -278,6 +283,8 @@ class ProcessingService:
             "turbidity": turbidity,
             "ndwi": ndwi,
             "water_mask": water_mask,
+            "water_detection_method": water_result.method,
+            "water_detection_details": water_result.details,
             "temperature_proxy": temperature,
         }
 
@@ -388,7 +395,10 @@ class ProcessingService:
             date_source = datetime.now(UTC).date().isoformat()
 
         # Cache suffix bumps when grid/water detection logic changes.
-        resolution_label = f"native-g{grid_block_size}-wf2"
+        water_detector_tag = "".join(
+            ch for ch in str(self.settings.water_detector_mode).lower() if ch.isalnum()
+        ) or "auto"
+        resolution_label = f"native-g{grid_block_size}-wf3-{water_detector_tag}"
         if bbox is None:
             stable_assets = json.dumps(
                 {k: assets[k] for k in sorted(assets.keys())},

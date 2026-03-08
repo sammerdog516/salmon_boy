@@ -22,6 +22,10 @@ This repository is optimized for an end-to-end local demo:
   - chlorophyll/algal proxy: `(B5 - B4) / (B5 + B4)`
   - turbidity proxy: `B4 / B3`
   - NDWI water mask: `(B3 - B8) / (B3 + B8)`
+- Water detection modes:
+  - `spectral`: NDWI + NIR/green + NDVI gates
+  - `auto` (default): tries pretrained water model if available, otherwise spectral fallback
+  - `pretrained`: explicit pretrained attempt, with spectral fallback metadata if unavailable
 - Water-only risk scoring:
   - `risk_raw = 0.5*chlorophyll + 0.3*turbidity + 0.2*temperature_proxy`
   - `temperature_proxy` is currently a stub (`0.0`) with explicit TODO
@@ -110,7 +114,7 @@ The backend now uses only these cache layers under `artifacts/cache/`:
 
 2. `clipped/` (clip-first band cache)
 - stores only corridor/AOI-clipped bands
-- stores only required Sentinel bands (`B3`, `B4`, `B5`, `B8`) and optional `B2` if present
+- stores only required Sentinel bands (`B3`, `B4`, `B5`, `B8`) and optional `B2/B11/B12` if present
 - writes compressed GeoTIFFs (LZW), optional downsample via `CLIPPED_CACHE_MAX_DIMENSION`
 - never stores full scenes in clipped cache
 
@@ -211,6 +215,19 @@ Optional for local training script:
 
 ```bash
 python -m pip install torch
+```
+
+Optional for pretrained water detector (6-band Sentinel scenes):
+
+```bash
+python -m pip install geoai-py
+```
+
+Then set in `.env`:
+
+```env
+WATER_DETECTOR_MODE=pretrained
+PRETRAINED_WATER_MODEL_REPO_ID=geoai4cities/sentinel2-water-segmentation
 ```
 
 ## API Endpoints
@@ -325,6 +342,8 @@ See `.env.example` for full list. Core settings include:
 - cache cap and clipping controls (`CACHE_MAX_SIZE_GB`, `CLIPPED_CACHE_MAX_DIMENSION`)
 - migration path file path
 - NDWI and heatmap thresholds
+- water detector mode and gates (`WATER_DETECTOR_MODE`, `WATER_NIR_TO_GREEN_RATIO_MAX`, `WATER_NDVI_MAX`)
+- optional pretrained water model repo id (`PRETRAINED_WATER_MODEL_REPO_ID`)
 - Sentinel API placeholders (stub integration)
 - Prithvi model name/flags (scaffold)
 
@@ -333,6 +352,7 @@ See `.env.example` for full list. Core settings include:
 - Local ingestion is the primary MVP path.
 - Input assets are GeoTIFF bands with keys mappable to `B3`, `B4`, `B5`, `B8`.
 - Bands should cover the same area; mismatch is handled with reprojection to a reference grid.
+- For pretrained water detection, provide additional Sentinel bands `B2`, `B11`, and `B12`.
 
 ## Testing
 
@@ -355,4 +375,5 @@ Tests include:
 - Temperature proxy is a stub (`0.0`) to keep MVP deterministic and lightweight.
 - Prithvi training endpoint is scaffolded; script-level `--model prithvi-head` currently falls back to baseline until backbone integration is completed.
 - `/risk/tiles` returns GeoJSON grid features (not XYZ tile server), which is intentional for fast frontend integration.
+- Pretrained water detection requires optional dependency `geoai-py` and 6-band Sentinel input (`B2,B3,B4,B8,B11,B12`).
 - Metadata cache uses JSON files for hackathon simplicity; SQLite is an easy future swap if concurrency grows.

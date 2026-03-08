@@ -18,7 +18,7 @@ from app.services.processing.grid import aggregate_raster_to_grid_geojson
 from app.services.processing.indices import chlorophyll_index, ndwi_index, turbidity_index
 from app.services.processing.raster import load_and_align_bands
 from app.services.processing.risk import normalize_risk, score_risk, summarize_risk
-from app.services.processing.water_mask import compute_water_mask_refined
+from app.services.processing.water_detector import detect_water_mask
 from app.services.storage.cache_manager import CacheManager
 from app.services.storage.metadata_store import MetadataStore
 from app.utils.geospatial import buffer_geometry_meters
@@ -156,7 +156,8 @@ class ModelInferenceService:
         stack = np.stack([b3, b4, b5, b8], axis=0).astype(np.float32)
 
         ndwi = ndwi_index(b3=b3, b8=b8)
-        water_mask = compute_water_mask_refined(
+        water_result = detect_water_mask(
+            bundle=raster_bundle,
             ndwi=ndwi,
             b3=b3,
             b4=b4,
@@ -164,7 +165,10 @@ class ModelInferenceService:
             threshold=self.settings.ndwi_water_threshold,
             nir_to_green_ratio_max=self.settings.water_nir_to_green_ratio_max,
             ndvi_max=self.settings.water_ndvi_max,
+            mode=self.settings.water_detector_mode,
+            pretrained_repo_id=self.settings.pretrained_water_model_repo_id,
         )
+        water_mask = water_result.mask
         chlorophyll = chlorophyll_index(b5=b5, b4=b4)
         turbidity = turbidity_index(b4=b4, b3=b3)
         _, rule_risk_norm = score_risk(
@@ -194,6 +198,7 @@ class ModelInferenceService:
         )
         summary["model_id"] = resolved_model_id
         summary["ndwi_mean"] = float(np.nanmean(ndwi[water_mask])) if np.any(water_mask) else 0.0
+        summary["water_detection_method"] = water_result.method
         summary["model_probability_mean"] = fusion_meta["model_probability_mean"]
         summary["model_probability_std"] = fusion_meta["model_probability_std"]
         summary["risk_fusion_mode"] = fusion_meta["risk_fusion_mode"]
@@ -447,7 +452,10 @@ class ModelInferenceService:
 
         model_hash = hashlib.sha1(model_id.encode("utf-8")).hexdigest()[:8]
         # Include pipeline tag to avoid stale cache reuse across fusion/detection updates.
-        resolution = f"native-g{grid_block_size}-m{model_hash}-wf2"
+        water_detector_tag = "".join(
+            ch for ch in str(self.settings.water_detector_mode).lower() if ch.isalnum()
+        ) or "auto"
+        resolution = f"native-g{grid_block_size}-m{model_hash}-wf3-{water_detector_tag}"
         if bbox is None:
             stable_assets = json.dumps(
                 {k: assets[k] for k in sorted(assets.keys())},

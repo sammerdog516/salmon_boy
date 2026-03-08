@@ -129,13 +129,14 @@ def load_and_align_bands(
             ref_shape=ref_shape,
         )
 
-    if "B2" in assets:
-        arrays["B2"] = _read_or_reproject_to_reference(
-            path=assets["B2"],
-            ref_crs=ref_crs,
-            ref_transform=ref_transform,
-            ref_shape=ref_shape,
-        )
+    for optional_band in ("B2", "B11", "B12"):
+        if optional_band in assets:
+            arrays[optional_band] = _read_or_reproject_to_reference(
+                path=assets[optional_band],
+                ref_crs=ref_crs,
+                ref_transform=ref_transform,
+                ref_shape=ref_shape,
+            )
 
     if aoi_bbox is not None:
         if len(aoi_bbox) != 4:

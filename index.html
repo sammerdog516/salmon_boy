@@ -307,6 +307,7 @@
             hasFitBounds: false,
             selectedTileLayer: null,
             lowContrastWarning: false,
+            waterDetectionMethod: null,
             visualScale: {
                 min: 0,
                 max: 1,
@@ -810,6 +811,7 @@
         }
 
         async function fetchRuleTiles() {
+            state.waterDetectionMethod = null;
             const load = async () => {
                 if (!state.sceneId) {
                     await ingestDefaultScene();
@@ -864,6 +866,7 @@
                 });
                 const predict = await parseJson(predictResponse);
                 state.lastPredictionId = predict.prediction_id;
+                state.waterDetectionMethod = predict?.summary?.water_detection_method || null;
 
                 const tilesResponse = await fetch(
                     `${API_BASE}/risk/tiles?source=model&prediction_id=${encodeURIComponent(state.lastPredictionId)}`
@@ -940,7 +943,10 @@
             const loadedMessage = state.lowContrastWarning
                 ? `Live data loaded: ${sourceUsed}. Warning: low tile contrast (try real Sentinel scene or smaller grid).`
                 : `Live data loaded: ${sourceUsed}`;
-            setConnectionStatus(loadedMessage, state.lowContrastWarning ? "warn" : "info");
+            const withWaterMethod = state.waterDetectionMethod
+                ? `${loadedMessage} | water detector: ${state.waterDetectionMethod}`
+                : loadedMessage;
+            setConnectionStatus(withWaterMethod, state.lowContrastWarning ? "warn" : "info");
         }
 
         function toggleSalmon() {
