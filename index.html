@@ -286,6 +286,7 @@
         const DEFAULT_SCENE_ID = params.get("scene_id") || "scene-6fe3d592c6f1";
         const DEFAULT_SOURCE = (params.get("source") || "rule").toLowerCase();
         const MODEL_CHECKPOINT = params.get("checkpoint");
+        const GRID_BLOCK_SIZE = Number(params.get("grid_block_size") || 8);
 
         const DEFAULT_THRESHOLDS = {
             yellow: 0.30,
@@ -305,6 +306,7 @@
             migrationPathCount: 0,
             hasFitBounds: false,
             selectedTileLayer: null,
+            lowContrastWarning: false,
             visualScale: {
                 min: 0,
                 max: 1,
@@ -705,6 +707,12 @@
                 : mean(scores);
             const maxRisk = scores.length ? Math.max(...scores) : 0;
             const waterCoverage = mean(waterFractions);
+            const waterStd = waterFractions.length
+                ? Math.sqrt(
+                    waterFractions.reduce((acc, v) => acc + (v - waterCoverage) ** 2, 0)
+                    / waterFractions.length
+                )
+                : 0;
             const chlorophyllMean = mean(chlorophyll);
             const turbidityMean = mean(turbidity);
 
@@ -730,6 +738,8 @@
             document.getElementById("turbid-val").textContent = `${(turbidityNorm * 100).toFixed(1)}%`;
             document.getElementById("plastic-val").textContent = `${(floatingPlasticNorm * 100).toFixed(1)}%`;
             updateRiskIndicator(maxRisk);
+
+            state.lowContrastWarning = waterFractions.length > 50 && waterStd < 0.04;
         }
 
         async function loadMigrationPaths() {
@@ -782,7 +792,7 @@
                     body: JSON.stringify({
                         scene_id: state.sceneId,
                         include_grid: true,
-                        grid_block_size: 32
+                        grid_block_size: GRID_BLOCK_SIZE
                     })
                 });
                 const processPayload = await parseJson(processResponse);
@@ -801,7 +811,7 @@
             const predictPayload = {
                 scene_id: state.sceneId,
                 include_grid: true,
-                grid_block_size: 32,
+                grid_block_size: GRID_BLOCK_SIZE,
                 force_recompute: false
             };
             if (state.modelCheckpoint) {
@@ -877,10 +887,10 @@
                 }
             }
 
-            setConnectionStatus(
-                `Live data loaded: ${sourceUsed}`,
-                "info"
-            );
+            const loadedMessage = state.lowContrastWarning
+                ? `Live data loaded: ${sourceUsed}. Warning: low tile contrast (try real Sentinel scene or smaller grid).`
+                : `Live data loaded: ${sourceUsed}`;
+            setConnectionStatus(loadedMessage, state.lowContrastWarning ? "warn" : "info");
         }
 
         function toggleSalmon() {
