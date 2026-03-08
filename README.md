@@ -189,6 +189,12 @@ Configured in environment/config (not hardcoded throughout code):
 pip install -r requirements.txt
 ```
 
+For Python 3.13 environments, use:
+
+```bash
+pip install -r requirements-py313.txt
+```
+
 3. Copy env defaults:
 
 ```bash

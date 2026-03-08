@@ -335,6 +335,13 @@ class CacheManager:
                 transform = transform * Affine.scale(x_scale, y_scale)
 
             profile = src.profile.copy()
+            use_tiling = out_w >= 16 and out_h >= 16
+            if use_tiling:
+                block_x = max(16, (min(256, out_w) // 16) * 16)
+                block_y = max(16, (min(256, out_h) // 16) * 16)
+            else:
+                block_x = None
+                block_y = None
             profile.update(
                 driver="GTiff",
                 height=out_h,
@@ -345,9 +352,12 @@ class CacheManager:
                 transform=transform,
                 nodata=nodata_value,
                 compress="LZW",
-                tiled=True,
+                tiled=use_tiling,
                 bigtiff="IF_SAFER",
             )
+            if use_tiling and block_x is not None and block_y is not None:
+                profile["blockxsize"] = block_x
+                profile["blockysize"] = block_y
             with rasterio.open(destination, "w", **profile) as dst:
                 dst.write(data, 1)
 
