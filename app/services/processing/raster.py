@@ -104,6 +104,15 @@ def load_and_align_bands(
     if missing:
         raise ValueError(f"Missing required band assets: {', '.join(missing)}")
 
+    # Fail fast on stale scene registry paths so API returns a clear 404-style error.
+    for band_name, raw_path in assets.items():
+        path = Path(raw_path)
+        if not path.exists():
+            raise FileNotFoundError(
+                f"Asset path not found for {band_name}: {path}. "
+                "Re-ingest the scene with valid local files."
+            )
+
     reference_band = required_bands[0]
     ref_path = assets[reference_band]
     with rasterio.open(ref_path) as ref_src:
