@@ -283,7 +283,7 @@
     <script>
         const params = new URLSearchParams(window.location.search);
         const API_BASE = params.get("api") || "http://127.0.0.1:8000";
-        const DEFAULT_SCENE_ID = params.get("scene_id") || "scene-6fe3d592c6f1";
+        const DEFAULT_SCENE_ID = params.get("scene_id") || "";
         const DEFAULT_SOURCE = (params.get("source") || "rule").toLowerCase();
         const MODEL_CHECKPOINT = params.get("checkpoint");
         const GRID_BLOCK_SIZE = Number(params.get("grid_block_size") || 8);
@@ -374,6 +374,38 @@
                 });
             }
             return response.json();
+        }
+
+        function isSceneBootstrapError(error) {
+            const message = String(error?.message || "").toLowerCase();
+            return (
+                message.includes("scene not found") ||
+                message.includes("no processed scenes found") ||
+                message.includes("asset path not found") ||
+                message.includes("band asset not found") ||
+                message.includes("scene assets are missing on disk") ||
+                message.includes("no such file or directory")
+            );
+        }
+
+        async function ingestDefaultScene() {
+            const payload = {
+                provider: "local",
+                local: {
+                    scene_name: "frontend-demo-scene",
+                    scene_dir: "data/sample"
+                }
+            };
+            const response = await fetch(`${API_BASE}/ingest/sentinel`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
+            });
+            const ingest = await parseJson(response);
+            state.sceneId = ingest.scene_id;
+            state.lastProcessedSceneId = null;
+            state.lastPredictionId = null;
+            return ingest;
         }
 
         function clamp(value, min, max) {
@@ -775,61 +807,85 @@
                 paramsRule.set("processed_scene_id", state.lastProcessedSceneId);
             }
 
-            try {
-                const response = await fetch(`${API_BASE}/risk/tiles?${paramsRule.toString()}`);
-                const payload = await parseJson(response);
-                if (payload.processed_scene_id) {
-                    state.lastProcessedSceneId = payload.processed_scene_id;
+            const load = async () => {
+                try {
+                    const response = await fetch(`${API_BASE}/risk/tiles?${paramsRule.toString()}`);
+                    const payload = await parseJson(response);
+                    if (payload.processed_scene_id) {
+                        state.lastProcessedSceneId = payload.processed_scene_id;
+                    }
+                    return payload;
+                } catch (error) {
+                    if (!state.sceneId) {
+                        throw error;
+                    }
+                    const processResponse = await fetch(`${API_BASE}/process/scene`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            scene_id: state.sceneId,
+                            include_grid: true,
+                            grid_block_size: GRID_BLOCK_SIZE
+                        })
+                    });
+                    const processPayload = await parseJson(processResponse);
+                    state.lastProcessedSceneId = processPayload.processed_scene_id;
+                    const responseTiles = await fetch(
+                        `${API_BASE}/risk/tiles?source=rule&processed_scene_id=${encodeURIComponent(state.lastProcessedSceneId)}`
+                    );
+                    return parseJson(responseTiles);
                 }
-                return payload;
+            };
+
+            try {
+                return await load();
             } catch (error) {
-                if (!state.sceneId) {
+                if (!isSceneBootstrapError(error)) {
                     throw error;
                 }
-                const processResponse = await fetch(`${API_BASE}/process/scene`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        scene_id: state.sceneId,
-                        include_grid: true,
-                        grid_block_size: GRID_BLOCK_SIZE
-                    })
-                });
-                const processPayload = await parseJson(processResponse);
-                state.lastProcessedSceneId = processPayload.processed_scene_id;
-                const responseTiles = await fetch(
-                    `${API_BASE}/risk/tiles?source=rule&processed_scene_id=${encodeURIComponent(state.lastProcessedSceneId)}`
-                );
-                return parseJson(responseTiles);
+                await ingestDefaultScene();
+                return load();
             }
         }
 
         async function fetchModelTiles() {
-            if (!state.sceneId) {
-                throw new Error("Enhanced risk view is unavailable for this dataset right now.");
-            }
-            const predictPayload = {
-                scene_id: state.sceneId,
-                include_grid: true,
-                grid_block_size: GRID_BLOCK_SIZE,
-                force_recompute: false
+            const load = async () => {
+                if (!state.sceneId) {
+                    await ingestDefaultScene();
+                }
+                const predictPayload = {
+                    scene_id: state.sceneId,
+                    include_grid: true,
+                    grid_block_size: GRID_BLOCK_SIZE,
+                    force_recompute: false
+                };
+                if (state.modelCheckpoint) {
+                    predictPayload.model_checkpoint = state.modelCheckpoint;
+                }
+
+                const predictResponse = await fetch(`${API_BASE}/risk/predict`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(predictPayload)
+                });
+                const predict = await parseJson(predictResponse);
+                state.lastPredictionId = predict.prediction_id;
+
+                const tilesResponse = await fetch(
+                    `${API_BASE}/risk/tiles?source=model&prediction_id=${encodeURIComponent(state.lastPredictionId)}`
+                );
+                return parseJson(tilesResponse);
             };
-            if (state.modelCheckpoint) {
-                predictPayload.model_checkpoint = state.modelCheckpoint;
+
+            try {
+                return await load();
+            } catch (error) {
+                if (!isSceneBootstrapError(error)) {
+                    throw error;
+                }
+                await ingestDefaultScene();
+                return load();
             }
-
-            const predictResponse = await fetch(`${API_BASE}/risk/predict`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(predictPayload)
-            });
-            const predict = await parseJson(predictResponse);
-            state.lastPredictionId = predict.prediction_id;
-
-            const tilesResponse = await fetch(
-                `${API_BASE}/risk/tiles?source=model&prediction_id=${encodeURIComponent(state.lastPredictionId)}`
-            );
-            return parseJson(tilesResponse);
         }
 
         async function loadAndRenderRiskData() {

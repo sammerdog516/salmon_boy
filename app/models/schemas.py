@@ -52,7 +52,11 @@ class IngestSentinelRequest(BaseModel):
     @model_validator(mode="after")
     def validate_provider_payload(self) -> "IngestSentinelRequest":
         if self.provider == ProviderType.local and self.local is None:
-            raise ValueError("`local` payload is required when provider='local'.")
+            # Make local ingestion zero-config for MVP demos.
+            self.local = LocalIngestPayload(
+                scene_name="local-sample-scene",
+                scene_dir="data/sample",
+            )
         if self.provider == ProviderType.sentinel and self.sentinel is None:
             raise ValueError("`sentinel` payload is required when provider='sentinel'.")
         return self
