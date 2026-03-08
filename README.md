@@ -1,4 +1,6 @@
 # Salmon Water Risk Backend (Hackathon MVP)
+<img width="1846" height="905" alt="frontimage" src="https://github.com/user-attachments/assets/024ce951-e806-45f6-9efb-23094b841a94" />
+
 
 FastAPI backend MVP for detecting water-related environmental risk proxies along salmon migratory paths using Sentinel-2 style inputs.
 
