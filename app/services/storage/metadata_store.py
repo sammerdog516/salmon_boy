@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
+import threading
+from tempfile import NamedTemporaryFile
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +20,12 @@ class MetadataStore:
         self.processed_registry_path = processed_registry_path
         self.training_registry_path = training_registry_path
         self.prediction_registry_path = prediction_registry_path
+        self._locks: dict[Path, threading.RLock] = {
+            scene_registry_path: threading.RLock(),
+            processed_registry_path: threading.RLock(),
+            training_registry_path: threading.RLock(),
+            prediction_registry_path: threading.RLock(),
+        }
         self._ensure_files()
 
     def _ensure_files(self) -> None:
@@ -31,23 +40,40 @@ class MetadataStore:
                 path.write_text("{}", encoding="utf-8")
 
     def _read_registry(self, path: Path) -> dict[str, Any]:
-        if not path.exists():
-            return {}
-        text = path.read_text(encoding="utf-8").strip()
-        if not text:
-            return {}
-        try:
-            return json.loads(text)
-        except json.JSONDecodeError:
-            return {}
+        with self._locks[path]:
+            if not path.exists():
+                return {}
+            text = path.read_text(encoding="utf-8").strip()
+            if not text:
+                return {}
+            try:
+                return json.loads(text)
+            except json.JSONDecodeError:
+                return {}
 
     def _write_registry(self, path: Path, payload: dict[str, Any]) -> None:
-        path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        with self._locks[path]:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            serialized = json.dumps(payload, indent=2)
+            with NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                dir=path.parent,
+                prefix=f"{path.name}.",
+                suffix=".tmp",
+                delete=False,
+            ) as handle:
+                handle.write(serialized)
+                handle.flush()
+                os.fsync(handle.fileno())
+                temp_name = handle.name
+            os.replace(temp_name, path)
 
     def _save_record(self, path: Path, record_id: str, payload: dict[str, Any]) -> None:
-        records = self._read_registry(path)
-        records[record_id] = payload
-        self._write_registry(path, records)
+        with self._locks[path]:
+            records = self._read_registry(path)
+            records[record_id] = payload
+            self._write_registry(path, records)
 
     def _get_record(self, path: Path, record_id: str) -> dict[str, Any] | None:
         records = self._read_registry(path)
