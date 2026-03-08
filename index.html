@@ -232,6 +232,203 @@
         /* --- SALMON PATH ANIMATION --- */
         @keyframes swim { to { stroke-dashoffset: -22px; } }
         .salmon-path { animation: swim 1.2s linear infinite; }
+
+        /* --- SPIRIT SALMON BOY CHAT --- */
+        #chat-fab {
+            position: fixed;
+            bottom: 24px;
+            left: 24px;
+            z-index: 2000;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #00c6ff, #0068a8);
+            border: 2px solid #00d4ff;
+            box-shadow: 0 4px 20px rgba(0, 212, 255, 0.45);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.7rem;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            color: #fff;
+        }
+        #chat-fab:hover {
+            transform: scale(1.1);
+            box-shadow: 0 6px 28px rgba(0, 212, 255, 0.65);
+        }
+        #chat-fab .chat-notif {
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            width: 14px;
+            height: 14px;
+            background: #ff4d4d;
+            border-radius: 50%;
+            border: 2px solid #121212;
+        }
+
+        #chat-panel {
+            position: fixed;
+            bottom: 96px;
+            left: 24px;
+            z-index: 2000;
+            width: 330px;
+            max-height: 500px;
+            background: rgba(14, 22, 30, 0.97);
+            border: 1px solid #1a5c7a;
+            border-radius: 14px;
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(0, 212, 255, 0.12);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            transform: translateY(10px) scale(0.97);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.22s ease, transform 0.22s ease;
+        }
+        #chat-panel.open {
+            opacity: 1;
+            pointer-events: all;
+            transform: translateY(0) scale(1);
+        }
+
+        .chat-header {
+            background: linear-gradient(135deg, #0a2a3d, #0d3d56);
+            border-bottom: 1px solid #1a5c7a;
+            padding: 12px 14px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .chat-avatar {
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #006994, #00d4ff);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.3rem;
+            flex-shrink: 0;
+            border: 2px solid rgba(0, 212, 255, 0.4);
+        }
+        .chat-header-info { flex: 1; }
+        .chat-header-name { font-weight: 700; font-size: 0.9rem; color: #fff; }
+        .chat-header-status { font-size: 0.68rem; color: #00d4ff; display: flex; align-items: center; gap: 4px; }
+        .chat-header-status::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: #00d4ff; display: inline-block; }
+        .chat-close-btn {
+            background: none;
+            border: none;
+            color: #888;
+            font-size: 1.1rem;
+            cursor: pointer;
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+        .chat-close-btn:hover { color: #fff; background: rgba(255,255,255,0.08); }
+
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 14px 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            scrollbar-width: thin;
+            scrollbar-color: #1a5c7a transparent;
+        }
+
+        .chat-bubble {
+            max-width: 85%;
+            padding: 9px 13px;
+            border-radius: 14px;
+            font-size: 0.80rem;
+            line-height: 1.5;
+        }
+        .chat-bubble.bot {
+            background: rgba(0, 100, 148, 0.25);
+            border: 1px solid rgba(0, 212, 255, 0.18);
+            color: #d4eeff;
+            align-self: flex-start;
+            border-bottom-left-radius: 4px;
+        }
+        .chat-bubble.user {
+            background: linear-gradient(135deg, #005c8a, #007ab8);
+            color: #fff;
+            align-self: flex-end;
+            border-bottom-right-radius: 4px;
+        }
+        .chat-bubble .bubble-sender {
+            font-size: 0.66rem;
+            font-weight: 700;
+            color: #00d4ff;
+            margin-bottom: 3px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .chat-quick-replies {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            padding: 0 12px 10px;
+        }
+        .qr-btn {
+            background: rgba(0, 100, 148, 0.2);
+            border: 1px solid #1a6b8a;
+            color: #7fd4f5;
+            border-radius: 20px;
+            padding: 5px 12px;
+            font-size: 0.74rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.18s ease;
+        }
+        .qr-btn:hover {
+            background: rgba(0, 150, 200, 0.3);
+            border-color: #00d4ff;
+            color: #fff;
+        }
+
+        .chat-input-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 12px;
+            border-top: 1px solid #1a3d50;
+            background: rgba(5, 15, 22, 0.8);
+        }
+        #chat-input {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid #1a5c7a;
+            border-radius: 20px;
+            padding: 8px 14px;
+            color: #fff;
+            font-size: 0.80rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        #chat-input::placeholder { color: #4a7a90; }
+        #chat-input:focus { border-color: #00d4ff; }
+        #chat-send-btn {
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #006994, #00a8cc);
+            border: none;
+            color: #fff;
+            font-size: 1rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            transition: transform 0.15s ease;
+            padding: 0;
+        }
+        #chat-send-btn:hover { transform: scale(1.1); background: linear-gradient(135deg, #007ab8, #00c6ff); }
     </style>
 </head>
 <body>
@@ -251,16 +448,16 @@
         </div>
 
         <div class="controls">
-            <button onclick="refreshLive()">↺ Refresh Live Data</button>
-            <button onclick="toggleSalmon()">🐟 Show/Hide Salmon Paths</button>
+            
+            <button onclick="toggleSalmon()">Show/Hide Salmon Paths</button>
 
             <details class="dropdown-container" name="dashboard-menus">
-                <summary>⚠️ Risk Factors</summary>
+                <summary>Risk Factors</summary>
                 <div class="dropdown-content">
                     <div class="resource-grid">
                         <details class="sub-dropdown">
                             <summary>
-                                <span>🌿 Chlorophyll</span>
+                                <span>Chlorophyll</span>
                                 <span class="metric-badge" id="chloro-val">--%</span>
                             </summary>
                             <div class="sub-dropdown-content">
@@ -271,7 +468,7 @@
 
                         <details class="sub-dropdown">
                             <summary>
-                                <span>🌊 Turbidity</span>
+                                <span>Turbidity</span>
                                 <span class="metric-badge" id="turbid-val">--%</span>
                             </summary>
                             <div class="sub-dropdown-content">
@@ -282,7 +479,7 @@
 
                         <details class="sub-dropdown">
                             <summary>
-                                <span>🥤 Microplastics Proxy</span>
+                                <span> Microplastics Proxy</span>
                                 <span class="metric-badge" id="plastic-val">--%</span>
                             </summary>
                             <div class="sub-dropdown-content">
@@ -295,11 +492,11 @@
             </details>
 
             <details class="dropdown-container" name="dashboard-menus">
-                <summary>❓ Help & Documentation</summary>
+                <summary>Help & Documentation</summary>
                 <div class="dropdown-content">
                     <p style="margin: 0 0 8px 0;"><strong style="color: #fff;">What is this map?</strong><br>
                     Real-time risk monitoring for Atlantic salmon on the Newfoundland coast using Sentinel-2 satellite imagery.</p>
-                    <p style="margin: 0 0 8px 0;"><strong style="color: #fff;">🐟 Salmon Paths:</strong><br>
+                    <p style="margin: 0 0 8px 0;"><strong style="color: #fff;">Salmon Paths:</strong><br>
                     Animated gold lines trace migration corridors through Trinity Bay, NL.</p>
                     <p style="margin: 0;"><strong style="color: #fff;">Coloured tiles:</strong><br>
                     Blue → low risk. Yellow → elevated. Red → high. Click any tile for details.</p>
@@ -309,6 +506,36 @@
     </div>
 
     <div id="map"></div>
+
+    <!-- Spirit Salmon Boy Chat Widget -->
+    <button id="chat-fab" onclick="toggleChat()" title="Talk to the Spirit Salmon Boy">
+        🐟
+        <span class="chat-notif"></span>
+    </button>
+
+    <div id="chat-panel">
+        <div class="chat-header">
+            <div class="chat-avatar">🐟</div>
+            <div class="chat-header-info">
+                <div class="chat-header-name">Spirit Salmon Boy</div>
+                <div class="chat-header-status">Online — Guardian of the Waters</div>
+            </div>
+            <button class="chat-close-btn" onclick="toggleChat()">✕</button>
+        </div>
+
+        <div class="chat-messages" id="chat-messages"></div>
+
+        <div class="chat-quick-replies" id="chat-quick-replies">
+            <button class="qr-btn" onclick="sendQuickReply('chlorophyll')">🌿 Chlorophyll</button>
+            <button class="qr-btn" onclick="sendQuickReply('turbidity')">💧 Turbidity</button>
+            <button class="qr-btn" onclick="sendQuickReply('plastic')">🧴 Microplastics</button>
+        </div>
+
+        <div class="chat-input-row">
+            <input type="text" id="chat-input" placeholder="Ask the spirit..." onkeydown="if(event.key==='Enter') sendChat()">
+            <button id="chat-send-btn" onclick="sendChat()">➤</button>
+        </div>
+    </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
@@ -879,6 +1106,155 @@
             await loadMigrationPaths();
             await refreshLive();
         })();
+    </script>
+
+    <script>
+        // ─── Spirit Salmon Boy Chat ───────────────────────────────────────────────
+        let chatOpen = false;
+
+        // Each response is { text, link?, linkText? }
+        const SALMON_RESPONSES = {
+            greet: [
+                { text: "Ah. You have come. I sensed your arrival — like a disturbance in a still pond. I am the Spirit Salmon Boy. Do not let the scales fool you. I have forgotten more about these waters than your finest instruments have yet measured. Ask. But ask wisely. I have little patience for vague questions." },
+                { text: "Hmm. Another student arrives at the edge of the water. *sighs* Very well. I, the Spirit Salmon Boy, shall illuminate what the satellite alone cannot tell you. The three threats are Chlorophyll, Turbidity, and Microplastics. Choose your lesson — or waste my time with a typed question. Either way, I am here." },
+            ],
+            chlorophyll: [
+                {
+                    text: "🌿 Chlorophyll. You see it as a colour on a map. I see it as a warning — like a student who smiles too confidently before an exam. When nutrients pour from the land, the algae do not ask permission. They bloom. They multiply. They consume every molecule of oxygen until the river itself cannot breathe. If the reading exceeds 20%, do not look away. A bloom ignored is a river lost. CONTRAST this number against the baseline — the difference will tell you everything.",
+                    link: "https://www.fisheries.noaa.gov/west-coast/science-data/hitting-us-where-it-hurts-untold-story-harmful-algal-blooms",
+                    linkText: "Read the NOAA Fish Impact Report →"
+                },
+                {
+                    text: "🌿 Student, observe. Nitrogen and phosphorus from farms and cities flow into these waters. The algae feast. For a brief moment the water glows green — even beautiful. Then the bloom collapses. Bacteria devour the corpse. Oxygen vanishes. Silence. This is not metaphor. This is PROXIMITY — cause and effect inseparably close. The Chlorophyll panel measures how near we stand to that silence. Do not dismiss small numbers. Small numbers become large ones without asking.",
+                    link: "https://www.fisheries.noaa.gov/west-coast/science-data/hitting-us-where-it-hurts-untold-story-harmful-algal-blooms",
+                    linkText: "Read the NOAA Fish Impact Report →"
+                },
+            ],
+            turbidity: [
+                {
+                    text: "💧 Turbidity. *taps the map* When the silt rises and the water clouds, do you know what is lost? ALIGNMENT — the alignment between light and plant, between plant and insect, between insect and young salmon. Everything that depends on clear water is thrown into disorder. The particles clog gills. The gravel beds where eggs rest are smothered. What your scientists call a 'water quality indicator,' I call a broken chain. And a chain broken at one link fails entirely.",
+                    link: "https://www.usgs.gov/water-science-school/science/turbidity-and-water",
+                    linkText: "Read the USGS Water Science Study →"
+                },
+                {
+                    text: "💧 Ah, turbidity. The murk. You look at cloudy water and see... cloudy water. I look at it and see the collapse of an entire world. No light reaches the plants. No plants feed the insects. No insects feed the juvenile salmon. The food web — once aligned like a perfectly balanced stance — crumbles from the bottom. REPETITION of these conditions across tiles on this map tells you whether this is an isolated disturbance or a systemic collapse. Study the pattern. The pattern is the lesson.",
+                    link: "https://www.usgs.gov/water-science-school/science/turbidity-and-water",
+                    linkText: "Read the USGS Water Science Study →"
+                },
+            ],
+            plastic: [
+                {
+                    text: "🧴 Microplastics. *long pause* You cannot see them. That is precisely the problem. Fragments of your disposable world drift on every current. Algae coats them — a false food. Small fish eat without knowing. The poison travels upward. By the time it reaches a salmon, it has been concentrated through four, five, six species. CONTRAST this invisibility with the measurable damage it causes — hormones disrupted, immune systems weakened, navigation instincts severed. The map shows the shadow of this threat. The threat itself is deeper still.",
+                    link: "https://marinedebris.noaa.gov/why-marine-debris-problem/ingestion",
+                    linkText: "Read the NOAA Marine Debris Study →"
+                },
+                {
+                    text: "🧴 Do you know how a salmon finds its way home? By the magnetic pulse of the Earth. By the remembered scent of its birth-river. Microplastics disrupt both. *shakes head slowly* REPETITION of plastic exposure across migration corridors means fewer salmon completing the journey — each season, fewer than the last. NOAA has documented this. The numbers do not flatter us. But numbers, unlike excuses, cannot be argued with. Reduce the plastic. Restore the path.",
+                    link: "https://marinedebris.noaa.gov/why-marine-debris-problem/ingestion",
+                    linkText: "Read the NOAA Marine Debris Study →"
+                },
+            ],
+            risk: [
+                { text: "The risk score. *clasps hands* Observe. Blue — the waters are calm. A student at rest. Yellow — something stirs. Pay attention. Red — I am in danger, and inaction now is the same as choosing harm. Infrared — the crisis does not wait for your committee meeting. CONTRAST between the tiles is your first teacher. Where you see red among blue, that cluster demands investigation. Click a tile. Read the data. Understanding begins with a single click." },
+                { text: "Each coloured tile is a lesson the ocean is trying to teach you. PROXIMITY matters — red tiles clustered along a migration path are far more dangerous than scattered red tiles in open water. The golden lines are not decoration. They are the ancient roads. When the road is red, the salmon must endure. When the road is infrared — *sighs* — some will not. This is why the map exists. Not to observe suffering. To prevent it." },
+            ],
+            salmon: [
+                { text: "Salmo salar. The leaper. Born in gravel, formed by current, called by instinct across thousands of kilometres of open ocean — and returned, precisely, to the same river stones where life began. *quiet reverence* This is not luck. This is mastery refined over millions of years. And yet, in a single human lifetime, their numbers in Newfoundland have fallen by more than seventy percent. Mastery alone cannot survive a poisoned river. That is why this map exists." },
+                { text: "A salmon does not wander. It does not guess. It remembers — with a precision no instrument can fully replicate. ALIGNMENT between river, instinct, and ocean is everything. Disrupt the water quality, and that alignment shatters. The salmon arrives at a river it no longer recognises. *pause* This map is your instrument for maintaining that alignment. Use it as though lives depend on it. They do." },
+            ],
+            help: [
+                { text: "You ask for help. Good. Admitting you need guidance is the first step — many students skip it and suffer longer than necessary. There are three threats to understand:\n\n🌿 Chlorophyll — algae blooms stealing oxygen\n💧 Turbidity — murk destroying the food web\n🧴 Microplastics — invisible poison in the chain\n\nPress the buttons below, or type your question. The map tiles are also clickable — each holds the satellite's unfiltered account. Begin. We are wasting daylight." },
+            ],
+            default: [
+                { text: "I do not know about that — but what I do know is this: 🌿 Chlorophyll. When nutrients flood these waters, the algae multiply without mercy and strip the river of every breath of oxygen. That I can speak to with certainty. Perhaps start there." },
+                { text: "Hmm. *tilts head* I do not know about that — but what I do know is that 💧 Turbidity is quietly dismantling the food web of these very waters as we speak. Silt smothers the gravel beds. Light vanishes. The chain breaks. That is worth your attention far more than what you just asked." },
+                { text: "I do not know about that — but what I do know is that 🧴 Microplastics are accumulating in every current these salmon must swim through. Invisible. Relentless. Concentrating up the food chain one meal at a time. *folds arms* Now that — that I can teach you." },
+                { text: "*long pause* ...No. That is outside the waters I guard. But what I do know is that three threats are converging on this ecosystem right now: 🌿 Chlorophyll, 💧 Turbidity, and 🧴 Microplastics. Use the buttons below. Begin with one. The rest will follow." },
+            ]
+        };
+
+        function pickResponse(arr) {
+            return arr[Math.floor(Math.random() * arr.length)];
+        }
+
+        function getResponse(text) {
+            const lower = text.toLowerCase();
+            if (/chlorophyll|algae|bloom|green|oxygen/.test(lower)) return pickResponse(SALMON_RESPONSES.chlorophyll);
+            if (/turbid|murky|cloudy|silt|dirt|clarity|clear/.test(lower)) return pickResponse(SALMON_RESPONSES.turbidity);
+            if (/plastic|microplastic|polymer|debris|toxin|poison/.test(lower)) return pickResponse(SALMON_RESPONSES.plastic);
+            if (/risk|score|colour|color|tile|map|danger|safe|yellow|red|blue/.test(lower)) return pickResponse(SALMON_RESPONSES.risk);
+            if (/salmon|fish|migration|spawn|river|ocean|swim|run/.test(lower)) return pickResponse(SALMON_RESPONSES.salmon);
+            if (/help|how|what|tell me|explain|guide|start/.test(lower)) return pickResponse(SALMON_RESPONSES.help);
+            return pickResponse(SALMON_RESPONSES.default);
+        }
+
+        function appendMessage(response, role) {
+            const container = document.getElementById("chat-messages");
+            const bubble = document.createElement("div");
+            bubble.className = `chat-bubble ${role}`;
+
+            if (role === "bot") {
+                const sender = document.createElement("div");
+                sender.className = "bubble-sender";
+                sender.textContent = "Spirit Salmon Boy";
+                bubble.appendChild(sender);
+
+                const content = document.createElement("div");
+                // response is an object { text, link?, linkText? } for bot; plain string for user
+                content.textContent = typeof response === "string" ? response : response.text;
+                bubble.appendChild(content);
+
+                if (response && response.link) {
+                    const linkEl = document.createElement("a");
+                    linkEl.href = response.link;
+                    linkEl.target = "_blank";
+                    linkEl.rel = "noopener noreferrer";
+                    linkEl.textContent = response.linkText || "Learn more →";
+                    linkEl.style.cssText = "display:block;margin-top:8px;color:#00d4ff;font-size:0.72rem;font-weight:700;text-decoration:none;";
+                    linkEl.onmouseenter = () => linkEl.style.textDecoration = "underline";
+                    linkEl.onmouseleave = () => linkEl.style.textDecoration = "none";
+                    bubble.appendChild(linkEl);
+                }
+            } else {
+                const content = document.createElement("div");
+                content.textContent = typeof response === "string" ? response : response.text;
+                bubble.appendChild(content);
+            }
+
+            container.appendChild(bubble);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function sendChat() {
+            const input = document.getElementById("chat-input");
+            const text = input.value.trim();
+            if (!text) return;
+            input.value = "";
+            appendMessage(text, "user");
+            const notif = document.querySelector(".chat-notif");
+            if (notif) notif.style.display = "none";
+            setTimeout(() => appendMessage(getResponse(text), "bot"), 480);
+        }
+
+        function sendQuickReply(topic) {
+            const labels = { chlorophyll: "Tell me about Chlorophyll", turbidity: "What is Turbidity?", plastic: "Explain Microplastics" };
+            appendMessage(labels[topic] || topic, "user");
+            const notif = document.querySelector(".chat-notif");
+            if (notif) notif.style.display = "none";
+            setTimeout(() => appendMessage(pickResponse(SALMON_RESPONSES[topic] || SALMON_RESPONSES.default), "bot"), 480);
+        }
+
+        function toggleChat() {
+            chatOpen = !chatOpen;
+            document.getElementById("chat-panel").classList.toggle("open", chatOpen);
+            if (chatOpen && document.getElementById("chat-messages").children.length === 0) {
+                setTimeout(() => appendMessage(pickResponse(SALMON_RESPONSES.greet), "bot"), 200);
+            }
+        }
+
+        window.toggleChat = toggleChat;
+        window.sendChat = sendChat;
+        window.sendQuickReply = sendQuickReply;
     </script>
 </body>
 </html>
