@@ -146,6 +146,11 @@ __pycache__/
 .venv/
 venv/
 
+# Pytest temp directories
+.codex_pytest_tmp*/
+.tmp_pytest/
+pytest-cache-files-*/
+
 # Generated MVP artifacts
 artifacts/*
 !artifacts/.gitkeep
