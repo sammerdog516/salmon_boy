@@ -163,6 +163,7 @@ class ProcessingService:
             else 0.0
         )
         summary["water_detection_method"] = str(features["water_detection_method"])
+        summary["water_detection_details"] = dict(features["water_detection_details"])
 
         grid = (
             aggregate_raster_to_grid_geojson(

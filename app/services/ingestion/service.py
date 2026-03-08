@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from pathlib import Path
 from uuid import uuid4
 
+from app.core.constants import REQUIRED_SENTINEL_BANDS
 from app.models.schemas import IngestSentinelRequest, ProviderType
 from app.services.ingestion.local_provider import LocalSceneProvider
 from app.services.ingestion.sentinel_provider import SentinelSceneProvider
@@ -31,7 +33,7 @@ class IngestionService:
             cached_scene_id = metadata_hit.get("scene_id")
             if isinstance(cached_scene_id, str):
                 scene = self.metadata_store.get_scene(cached_scene_id)
-                if scene:
+                if scene and self._can_reuse_cached_scene(scene=scene, request=request):
                     return {
                         "scene_id": scene["scene_id"],
                         "provider": ProviderType(scene["provider"]),
@@ -93,3 +95,42 @@ class IngestionService:
             "discovered_bands": result.discovered_bands,
             "message": result.provider_message,
         }
+
+    def _can_reuse_cached_scene(
+        self,
+        scene: dict[str, object],
+        request: IngestSentinelRequest,
+    ) -> bool:
+        assets = scene.get("assets")
+        if not isinstance(assets, dict):
+            return False
+
+        # Cached local paths can become stale; verify files still exist.
+        for band in REQUIRED_SENTINEL_BANDS:
+            raw_path = assets.get(band)
+            if not isinstance(raw_path, str) or not Path(raw_path).exists():
+                return False
+
+        # For sample/demo scenes, require optional pretrained-water bands too.
+        if (
+            request.provider == ProviderType.local
+            and request.local is not None
+            and self._is_sample_scene_path(request.local.scene_dir or "")
+        ):
+            for optional_band in ("B2", "B11", "B12"):
+                raw_path = assets.get(optional_band)
+                if not isinstance(raw_path, str) or not Path(raw_path).exists():
+                    return False
+
+        return True
+
+    def _is_sample_scene_path(self, raw_path: str) -> bool:
+        normalized = raw_path.replace("\\", "/").strip().lower()
+        if not normalized:
+            return False
+        return (
+            normalized == "data/sample"
+            or normalized.endswith("/data/sample")
+            or normalized == "sample"
+            or normalized.endswith("/sample")
+        )

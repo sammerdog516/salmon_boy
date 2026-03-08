@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-import tempfile
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 import numpy as np
 
@@ -63,7 +64,7 @@ def detect_water_mask(
             details={"missing_bands": missing},
         )
 
-    pretrained = _detect_water_with_geoai(
+    pretrained, pretrained_error = _detect_water_with_geoai(
         bundle=bundle,
         repo_id=pretrained_repo_id or "geoai4cities/sentinel2-water-segmentation",
     )
@@ -79,34 +80,43 @@ def detect_water_mask(
                 "hint": (
                     "Install geoai-py and dependencies, then set "
                     "WATER_DETECTOR_MODE=pretrained."
-                )
+                ),
+                "error": pretrained_error,
             },
         )
     return WaterDetectionResult(
         mask=spectral_mask,
         method="spectral_refined_pretrained_fallback",
-        details={},
+        details={"error": pretrained_error},
     )
 
 
 def _detect_water_with_geoai(
     bundle: RasterBundle,
     repo_id: str,
-) -> WaterDetectionResult | None:
+) -> tuple[WaterDetectionResult | None, str | None]:
+    run_dir = Path.cwd() / "artifacts" / "tmp" / "water_model" / f"run-{uuid4().hex[:10]}"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    mpl_dir = run_dir / "mplconfig"
+    mpl_dir.mkdir(parents=True, exist_ok=True)
+    os.environ["MPLCONFIGDIR"] = str(mpl_dir)
+    os.environ["TMP"] = str(run_dir)
+    os.environ["TEMP"] = str(run_dir)
+
     try:
         import rasterio
-        from geoai.inference import timm_segmentation_from_hub
-    except ImportError:
-        return None
+        from geoai.timm_segment import timm_segmentation_from_hub
+    except Exception as exc:
+        return None, f"geoai_import_failed: {exc}"
 
     band_order = ("B2", "B3", "B4", "B8", "B11", "B12")
     stack = np.stack([bundle.arrays[band] for band in band_order], axis=0).astype(np.float32)
     scale = 10000.0 if float(np.nanmax(stack)) <= 1.0 else 1.0
     scaled = np.clip(stack * scale, 0.0, 65535.0).astype(np.uint16)
 
-    with tempfile.TemporaryDirectory(prefix="water-model-") as temp_dir:
-        input_path = Path(temp_dir) / "s2_input.tif"
-        output_path = Path(temp_dir) / "water_mask.tif"
+    try:
+        input_path = run_dir / "s2_input.tif"
+        output_path = run_dir / "water_mask.tif"
         profile = {
             "driver": "GTiff",
             "height": bundle.height,
@@ -121,27 +131,36 @@ def _detect_water_with_geoai(
             "blockysize": 256,
             "nodata": 0,
         }
-        with rasterio.open(input_path, "w", **profile) as dst:
-            dst.write(scaled)
+        try:
+            with rasterio.open(input_path, "w", **profile) as dst:
+                dst.write(scaled)
+        except Exception as exc:
+            return None, f"geoai_input_write_failed: {exc}"
 
         try:
             timm_segmentation_from_hub(
-                input_image_path=str(input_path),
-                output_image_path=str(output_path),
+                input_path=str(input_path),
+                output_path=str(output_path),
                 repo_id=repo_id,
+                quiet=True,
             )
-        except Exception:
-            return None
+        except Exception as exc:
+            return None, f"geoai_inference_failed: {exc}"
 
         if not output_path.exists():
-            return None
+            return None, "geoai_output_missing"
 
         with rasterio.open(output_path) as src:
             prediction = src.read(1)
+    except Exception as exc:
+        return None, f"geoai_runtime_failed: {exc}"
 
     mask = np.isfinite(prediction) & (prediction > 0)
-    return WaterDetectionResult(
-        mask=mask,
-        method="pretrained_geoai",
-        details={"repo_id": repo_id},
+    return (
+        WaterDetectionResult(
+            mask=mask,
+            method="pretrained_geoai",
+            details={"repo_id": repo_id},
+        ),
+        None,
     )

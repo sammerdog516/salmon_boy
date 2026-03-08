@@ -199,6 +199,7 @@ class ModelInferenceService:
         summary["model_id"] = resolved_model_id
         summary["ndwi_mean"] = float(np.nanmean(ndwi[water_mask])) if np.any(water_mask) else 0.0
         summary["water_detection_method"] = water_result.method
+        summary["water_detection_details"] = dict(water_result.details)
         summary["model_probability_mean"] = fusion_meta["model_probability_mean"]
         summary["model_probability_std"] = fusion_meta["model_probability_std"]
         summary["risk_fusion_mode"] = fusion_meta["risk_fusion_mode"]
