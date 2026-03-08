@@ -251,55 +251,55 @@
         </div>
 
         <div class="controls">
-            <button onclick="refreshLive()">↺ Refresh Live Data</button>
-            <button onclick="toggleSalmon()">🐟 Show/Hide Salmon Paths</button>
+            
+            <button onclick="toggleSalmon()">Show/Hide Salmon Paths</button>
 
             <details class="dropdown-container" name="dashboard-menus">
-                <summary>⚠️ Risk Factors</summary>
+                <summary>Risk Factors</summary>
                 <div class="dropdown-content">
                     <div class="resource-grid">
                         <details class="sub-dropdown">
                             <summary>
-                                <span>🌿 Chlorophyll</span>
+                                <span>Chlorophyll</span>
                                 <span class="metric-badge" id="chloro-val">--%</span>
                             </summary>
                             <div class="sub-dropdown-content">
-                                Excess nutrients cause algae to rapidly multiply, creating dense surface layers that deplete oxygen and block sunlight — directly threatening salmon habitat.
-                                <br><a href="https://oceanservice.noaa.gov/facts/chlorophyll.html" target="_blank" class="resource-link">Learn more ›</a>
-                            </div>
+                                    Excess nutrients cause algae to rapidly multiply. As it decays, it sucks all the oxygen out of the water, suffocating fish.
+                                    <br><a href="https://www.fisheries.noaa.gov/west-coast/science-data/hitting-us-where-it-hurts-untold-story-harmful-algal-blooms" target="_blank" class="resource-link">Read the NOAA Fish Impact Report ›</a>
+                                </div>
                         </details>
 
                         <details class="sub-dropdown">
                             <summary>
-                                <span>🌊 Turbidity</span>
+                                <span>Turbidity</span>
                                 <span class="metric-badge" id="turbid-val">--%</span>
                             </summary>
                             <div class="sub-dropdown-content">
-                                Cloudy water from sediment and runoff blocks sunlight and disrupts salmon navigation. High turbidity near river mouths often signals environmental stress.
-                                <br><a href="https://www.epa.gov/national-aquatic-resource-surveys/indicators-turbidity" target="_blank" class="resource-link">Learn more ›</a>
+                                Cloudy water blocks sunlight, killing underwater plants. The suspended dirt directly clogs salmon gills and spreads disease.
+                                <br><a href="https://www.usgs.gov/water-science-school/science/turbidity-and-water" target="_blank" class="resource-link">Read the USGS Water Science study ›</a>
                             </div>
                         </details>
 
                         <details class="sub-dropdown">
                             <summary>
-                                <span>🥤 Microplastics Proxy</span>
+                                <span> Microplastics Proxy</span>
                                 <span class="metric-badge" id="plastic-val">--%</span>
                             </summary>
                             <div class="sub-dropdown-content">
-                                Estimated from turbidity and water coverage. Algae attaches to microplastic waste, concentrating toxins in fish feeding zones along migration corridors.
-                                <br><a href="https://www.unep.org/plastic-pollution" target="_blank" class="resource-link">Learn more ›</a>
-                            </div>
+                                    Algae grows on floating plastics. Small fish eat the toxic plastic-algae combo, pushing the poison up the food chain to Salmon.
+                                    <br><a href="https://marinedebris.noaa.gov/why-marine-debris-problem/ingestion" target="_blank" class="resource-link">Read the NOAA Marine Debris study ›</a>
+                                </div>
                         </details>
                     </div>
                 </div>
             </details>
 
             <details class="dropdown-container" name="dashboard-menus">
-                <summary>❓ Help & Documentation</summary>
+                <summary>Help & Documentation</summary>
                 <div class="dropdown-content">
                     <p style="margin: 0 0 8px 0;"><strong style="color: #fff;">What is this map?</strong><br>
                     Real-time risk monitoring for Atlantic salmon on the Newfoundland coast using Sentinel-2 satellite imagery.</p>
-                    <p style="margin: 0 0 8px 0;"><strong style="color: #fff;">🐟 Salmon Paths:</strong><br>
+                    <p style="margin: 0 0 8px 0;"><strong style="color: #fff;">Salmon Paths:</strong><br>
                     Animated gold lines trace migration corridors through Trinity Bay, NL.</p>
                     <p style="margin: 0;"><strong style="color: #fff;">Coloured tiles:</strong><br>
                     Blue → low risk. Yellow → elevated. Red → high. Click any tile for details.</p>
