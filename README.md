@@ -78,12 +78,20 @@ app/
     training/
       dataset.py
       prithvi.py
+      weak_labels.py
     storage/
       metadata_store.py
+      cache_manager.py
   utils/
     bands.py
     geospatial.py
+scripts/
+  build_dataset.py
+  tile_dataset.py
+  train.py
 data/
+  raw/
+  processed/
   sample/
   migration_paths/
 artifacts/
@@ -139,6 +147,25 @@ Example:
 11. Optional migration-path buffered intersection summary
 12. API delivery of summaries/artifact references/grid features
 
+## Dataset-First Training Flow
+
+Order used in this repo:
+
+1. `scripts/build_dataset.py`
+- input: local scene assets + bbox
+- output: scene-level arrays (`4-band`, `risk_norm`, `water_mask`, `binary_label`)
+- writes manifests and metadata for repeatability
+
+2. `scripts/tile_dataset.py`
+- converts scene arrays into train/val tiles (default `256x256`)
+- keeps tiles with sufficient water and a balanced positive/negative mix
+- writes `tiles_manifest.jsonl`
+
+3. `scripts/train.py`
+- trains a lightweight binary segmentation baseline on tiled weak labels
+- target is `label = (risk_norm >= 0.65)` (water-aware)
+- `--model prithvi-head` is scaffolded and currently falls back to baseline model
+
 ## Risk Thresholds
 
 Configured in environment/config (not hardcoded throughout code):
@@ -166,6 +193,12 @@ cp .env.example .env
 
 ```bash
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+Optional for local training script:
+
+```bash
+python -m pip install torch
 ```
 
 ## API Endpoints
@@ -219,6 +252,32 @@ curl -X POST http://localhost:8000/process/scene \
 curl "http://localhost:8000/risk/tiles?processed_scene_id=proc-abc123"
 ```
 
+### 4) Build weak-label dataset sample
+
+```bash
+python scripts/build_dataset.py \
+  --scene-dir data/sample \
+  --bbox -123.2,49.1,-122.8,49.4
+```
+
+### 5) Tile dataset for training
+
+```bash
+python scripts/tile_dataset.py \
+  --input-root data/processed \
+  --tile-size 256 \
+  --stride 256
+```
+
+### 6) Train baseline segmentation model
+
+```bash
+python scripts/train.py \
+  --manifest data/processed/tiles_manifest.jsonl \
+  --epochs 10 \
+  --batch-size 8
+```
+
 ## Environment Variables
 
 See `.env.example` for full list. Core settings include:
@@ -255,6 +314,6 @@ Tests include:
 
 - Remote Sentinel ingestion (`provider=sentinel`) is scaffolded, not production-integrated.
 - Temperature proxy is a stub (`0.0`) to keep MVP deterministic and lightweight.
-- Prithvi training endpoints track/scaffold jobs; real fine-tuning is not implemented here.
+- Prithvi training endpoint is scaffolded; script-level `--model prithvi-head` currently falls back to baseline until backbone integration is completed.
 - `/risk/tiles` returns GeoJSON grid features (not XYZ tile server), which is intentional for fast frontend integration.
 - Metadata cache uses JSON files for hackathon simplicity; SQLite is an easy future swap if concurrency grows.

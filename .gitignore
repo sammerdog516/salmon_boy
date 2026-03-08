@@ -149,3 +149,17 @@ venv/
 # Generated MVP artifacts
 artifacts/*
 !artifacts/.gitkeep
+
+# Generated dataset/training outputs
+data/raw/*
+!data/raw/README.md
+data/processed/*
+!data/processed/README.md
+!data/processed/scenes/
+!data/processed/labels/
+!data/processed/tiles/
+data/processed/scenes/*
+data/processed/labels/*
+data/processed/tiles/*
+!data/processed/labels/tiles/
+data/processed/labels/tiles/*
