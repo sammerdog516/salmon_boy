@@ -3,238 +3,667 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EcoWatch: Algal Bloom & Salmon Migration</title>
-    
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    
+    <title>EcoWatch: Salmon Risk Monitor</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
     <style>
         :root {
             --bg-dark: #121212;
-            --panel-bg: rgba(20, 20, 20, 0.9);
-            --text-main: #ffffff; /* Increased contrast (brighter white) */
-            --text-muted: #b3b3b3; /* Increased contrast slightly */
-            --risk-high: #ff4d4d;
+            --panel-bg: rgba(20, 20, 20, 0.92);
+            --text-main: #ffffff;
+            --text-muted: #b4b4b4;
             --risk-low: #00d4ff;
-            --border-color: #444; /* Standardized border color */
-            --radius-main: 8px;   /* Standardized corner roundness */
+            --risk-mid: #f1c232;
+            --risk-high: #ff4d4d;
+            --border-color: #444;
+            --radius-main: 8px;
         }
 
-        body { background-color: var(--bg-dark); color: var(--text-main); margin: 0; overflow: hidden; font-family: sans-serif; }
-        #map { height: 100vh; width: 100vw; z-index: 1; }
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            margin: 0;
+            overflow: hidden;
+            font-family: sans-serif;
+        }
+
+        #map {
+            height: 100vh;
+            width: 100vw;
+            z-index: 1;
+        }
 
         .dashboard-overlay {
-            position: absolute; top: 20px; right: 20px; width: 320px;
-            background: var(--panel-bg); backdrop-filter: blur(10px);
-            border-radius: var(--radius-main); padding: 20px; z-index: 1000;
-            border: 1px solid var(--border-color); box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 340px;
+            background: var(--panel-bg);
+            backdrop-filter: blur(10px);
+            border-radius: var(--radius-main);
+            padding: 16px;
+            z-index: 1000;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
         }
 
-        .metric-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
-        .metric-card { background: rgba(255,255,255,0.05); padding: 12px; border-radius: var(--radius-main); text-align: center; }
-        .metric-value { font-size: 1.4rem; font-weight: bold; display: block; margin-bottom: 2px; }
-        .metric-label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+        .subtle {
+            color: var(--text-muted);
+            font-size: 0.78rem;
+        }
 
-        .risk-status { padding: 12px; border-radius: var(--radius-main); text-align: center; font-weight: bold; margin-bottom: 20px; letter-spacing: 1px; }
-        .status-low { background: rgba(0, 212, 255, 0.1); color: var(--risk-low); border: 1px solid var(--risk-low); }
-        .status-high { background: rgba(255, 77, 77, 0.1); color: var(--risk-high); border: 1px solid var(--risk-high); }
+        .metric-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 14px;
+        }
 
-        .controls { display: flex; flex-direction: column; gap: 10px; }
+        .metric-card {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 10px;
+            border-radius: var(--radius-main);
+            text-align: center;
+        }
+
+        .metric-value {
+            font-size: 1.2rem;
+            font-weight: bold;
+            display: block;
+        }
+
+        .metric-label {
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .risk-status {
+            padding: 10px;
+            border-radius: var(--radius-main);
+            text-align: center;
+            font-weight: bold;
+            margin: 10px 0 14px 0;
+            letter-spacing: 0.8px;
+            border: 1px solid transparent;
+        }
+
+        .status-low {
+            background: rgba(0, 212, 255, 0.12);
+            color: var(--risk-low);
+            border-color: var(--risk-low);
+        }
+
+        .status-medium {
+            background: rgba(241, 194, 50, 0.12);
+            color: var(--risk-mid);
+            border-color: var(--risk-mid);
+        }
+
+        .status-high {
+            background: rgba(255, 77, 77, 0.12);
+            color: var(--risk-high);
+            border-color: var(--risk-high);
+        }
+
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        button,
+        input {
+            border-radius: var(--radius-main);
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+            background: #2c2c2c;
+            padding: 10px;
+            font-size: 0.85rem;
+        }
+
         button {
-            padding: 12px; background: #333; color: white; border: 1px solid var(--border-color);
-            border-radius: var(--radius-main); cursor: pointer; transition: 0.2s; font-weight: bold;
+            cursor: pointer;
+            font-weight: 600;
         }
-        button:hover { background: #444; border-color: #666; }
 
-        /* --- STYLES FOR THE HELP DROPDOWN --- */
-        .help-dropdown { 
-            display: flex; flex-direction: column; 
-            margin-top: 5px;
-            background: rgba(255,255,255,0.05);
+        button:hover {
+            background: #3a3a3a;
+        }
+
+        .row {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 8px;
+        }
+
+        details {
+            margin-top: 8px;
+            background: rgba(255, 255, 255, 0.04);
             border: 1px solid var(--border-color);
             border-radius: var(--radius-main);
         }
-        
-        .help-dropdown summary {
-            padding: 12px; cursor: pointer; font-size: 0.85rem; font-weight: bold;
-            background: #2a2a2a; border-radius: var(--radius-main); list-style: none; user-select: none;
-            text-align: center; transition: 0.2s;
-        }
-        .help-dropdown summary:hover { background: #333; }
 
-        .help-content {
-            padding: 15px; font-size: 0.85rem; color: var(--text-muted);
-            line-height: 1.6; border-top: 1px solid var(--border-color);
-            text-align: left; /* Kept text left-aligned for readability */
+        summary {
+            cursor: pointer;
+            padding: 10px;
+            font-weight: 600;
+            font-size: 0.84rem;
         }
 
-        .help-content p { margin: 0 0 10px 0; }
-        .help-content p:last-child { margin: 0; }:root {
-            --bg-dark: #121212;
-            --panel-bg: rgba(20, 20, 20, 0.9);
-            --text-main: #ffffff; /* Increased contrast (brighter white) */
-            --text-muted: #b3b3b3; /* Increased contrast slightly */
-            --risk-high: #ff4d4d;
-            --risk-low: #00d4ff;
-            --border-color: #444; /* Standardized border color */
-            --radius-main: 8px;   /* Standardized corner roundness */
+        .details-content {
+            padding: 0 10px 10px 10px;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            line-height: 1.5;
         }
 
-        body { background-color: var(--bg-dark); color: var(--text-main); margin: 0; overflow: hidden; font-family: sans-serif; }
-        #map { height: 100vh; width: 100vw; z-index: 1; }
-
-        .dashboard-overlay {
-            position: absolute; top: 20px; right: 20px; width: 320px;
-            background: var(--panel-bg); backdrop-filter: blur(10px);
-            border-radius: var(--radius-main); padding: 20px; z-index: 1000;
-            border: 1px solid var(--border-color); box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+        .factor-row {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 6px;
+            padding-top: 6px;
+            border-top: 1px dashed #3d3d3d;
         }
 
-        .metric-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
-        .metric-card { background: rgba(255,255,255,0.05); padding: 12px; border-radius: var(--radius-main); text-align: center; }
-        .metric-value { font-size: 1.4rem; font-weight: bold; display: block; margin-bottom: 2px; }
-        .metric-label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
-
-        .risk-status { padding: 12px; border-radius: var(--radius-main); text-align: center; font-weight: bold; margin-bottom: 20px; letter-spacing: 1px; }
-        .status-low { background: rgba(0, 212, 255, 0.1); color: var(--risk-low); border: 1px solid var(--risk-low); }
-        .status-high { background: rgba(255, 77, 77, 0.1); color: var(--risk-high); border: 1px solid var(--risk-high); }
-
-        .controls { display: flex; flex-direction: column; gap: 10px; }
-        button {
-            padding: 12px; background: #333; color: white; border: 1px solid var(--border-color);
-            border-radius: var(--radius-main); cursor: pointer; transition: 0.2s; font-weight: bold;
-        }
-        button:hover { background: #444; border-color: #666; }
-
-        /* --- STYLES FOR THE HELP DROPDOWN --- */
-        .help-dropdown { 
-            display: flex; flex-direction: column; 
-            margin-top: 5px;
-            background: rgba(255,255,255,0.05);
-            border: 1px solid var(--border-color);
-            border-radius: var(--radius-main);
-        }
-        
-        .help-dropdown summary {
-            padding: 12px; cursor: pointer; font-size: 0.85rem; font-weight: bold;
-            background: #2a2a2a; border-radius: var(--radius-main); list-style: none; user-select: none;
-            text-align: center; transition: 0.2s;
-        }
-        .help-dropdown summary:hover { background: #333; }
-
-        .help-content {
-            padding: 15px; font-size: 0.85rem; color: var(--text-muted);
-            line-height: 1.6; border-top: 1px solid var(--border-color);
-            text-align: left; /* Kept text left-aligned for readability */
+        @keyframes swim {
+            to { stroke-dashoffset: -22px; }
         }
 
-        .help-content p { margin: 0 0 10px 0; }
-        .help-content p:last-child { margin: 0; }
-        /* ---------------------------------------- */
-
-        @keyframes swim { to { stroke-dashoffset: -20px; } }
-        .salmon-path { animation: swim 1s linear infinite; }
+        .salmon-path {
+            animation: swim 1.2s linear infinite;
+        }
     </style>
 </head>
 <body>
-
     <div class="dashboard-overlay">
-        <h2 style="font-size: 1.1rem; margin-bottom: 5px;">EcoWatch Live</h2>
+        <h2 style="margin: 0;">EcoWatch Live</h2>
+        <div id="connection-status" class="subtle">Connecting to backend...</div>
         <div id="risk-indicator" class="risk-status status-low">LOW RISK</div>
-        
+
         <div class="metric-grid">
-            <div class="metric-card"><span class="metric-value" id="bloom-density">12%</span><span class="metric-label">Bloom</span></div>
-            <div class="metric-card"><span class="metric-value">12k</span><span class="metric-label">Salmon</span></div>
+            <div class="metric-card">
+                <span class="metric-value" id="bloom-density">--</span>
+                <span class="metric-label">Avg Risk</span>
+            </div>
+            <div class="metric-card">
+                <span class="metric-value" id="water-coverage">--</span>
+                <span class="metric-label">Water Coverage</span>
+            </div>
+            <div class="metric-card">
+                <span class="metric-value" id="grid-cells">--</span>
+                <span class="metric-label">Risk Cells</span>
+            </div>
+            <div class="metric-card">
+                <span class="metric-value" id="salmon-path-count">--</span>
+                <span class="metric-label">Salmon Paths</span>
+            </div>
         </div>
 
         <div class="controls">
-            <button onclick="toggleSalmon()">🐟 Show/Hide Salmon</button>
-            <button onclick="toggleRisk()">⚠️ Toggle Risk Level</button>
-            
-            <details class="help-dropdown">
-                <summary>Help & Documentation</summary>
-                <div class="help-content">
-                    <p><strong>What is this map?</strong><br>
-                    This dashboard tracks the overlap between harmful Algal Blooms and Salmon migration routes.</p>
-                    <p><strong>🐟 Show/Hide Salmon:</strong><br>
-                    Click to reveal or hide the yellow migration paths.</p>
-                    <p><strong>⚠️ Toggle Risk Level:</strong><br>
-                    Click to see what happens when Algal Blooms grow from a Low Risk (Blue) to a Critical Risk (Red).</p>
-                </div>
-            </details>
+            <div class="row">
+                <input id="scene-id-input" placeholder="Scene ID (for model mode)">
+                <button onclick="applySceneId()">Apply</button>
+            </div>
+            <button onclick="refreshLive()">Refresh Live Data</button>
+            <button onclick="toggleRisk()" id="source-toggle">Switch to Rule Source</button>
+            <button onclick="toggleSalmon()">Show/Hide Salmon Paths</button>
         </div>
+
+        <details>
+            <summary>Live Factors</summary>
+            <div class="details-content">
+                <div class="factor-row"><span>Chlorophyll proxy</span><strong id="chloro-val">--</strong></div>
+                <div class="factor-row"><span>Turbidity proxy</span><strong id="turbid-val">--</strong></div>
+                <div class="factor-row"><span>High-risk cells</span><strong id="high-risk-val">--</strong></div>
+            </div>
+        </details>
+
+        <details>
+            <summary>Usage</summary>
+            <div class="details-content">
+                <div>This frontend calls backend APIs and renders:</div>
+                <div>1. Risk grid polygons from <code>/risk/tiles</code></div>
+                <div>2. Heatmap intensities from risk scores</div>
+                <div>3. Migration paths from <code>/migration-paths/geojson</code></div>
+                <div style="margin-top: 8px;">Query params:</div>
+                <div><code>?api=http://127.0.0.1:8000&scene_id=scene-...&source=model</code></div>
+            </div>
+        </details>
     </div>
 
     <div id="map"></div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
-
     <script>
-        // 1. Setup Map
-        const map = L.map('map').setView([54.0, -100.0], 4);
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
+        const params = new URLSearchParams(window.location.search);
+        const API_BASE = params.get("api") || "http://127.0.0.1:8000";
+        const DEFAULT_SCENE_ID = params.get("scene_id") || "scene-6fe3d592c6f1";
+        const DEFAULT_SOURCE = (params.get("source") || "model").toLowerCase();
+        const MODEL_CHECKPOINT = params.get("checkpoint");
 
-        // 2. Data
-        const salmonPaths = [
-            { name: "Fraser River", path: [[49.25, -123.18], [49.20, -122.55], [49.38, -121.44]] },
-            { name: "Skeena River", path: [[54.15, -130.00], [54.50, -128.60], [55.25, -127.60]] },
-            { name: "Miramichi River", path: [[47.20, -64.50], [47.05, -65.50], [46.65, -66.35]] },
-            { name: "Humber River", path: [[49.40, -58.60], [49.10, -58.10], [49.25, -57.40]] }
-        ];
+        const DEFAULT_THRESHOLDS = {
+            yellow: 0.30,
+            red: 0.65,
+            infrared: 0.85
+        };
 
-        // 3. Create Salmon Layer
-        const salmonLayerGroup = L.layerGroup();
-        salmonPaths.forEach(route => {
-            L.polyline(route.path, {
-                color: 'gold', weight: 3, opacity: 0.8, dashArray: '10, 10', className: 'salmon-path'
-            }).addTo(salmonLayerGroup).bindPopup(route.name);
-        });
-        salmonLayerGroup.addTo(map); // Start with fish visible
+        const state = {
+            useModelSource: DEFAULT_SOURCE !== "rule",
+            sceneId: DEFAULT_SCENE_ID,
+            modelCheckpoint: MODEL_CHECKPOINT,
+            lastProcessedSceneId: null,
+            lastPredictionId: null,
+            thresholds: { ...DEFAULT_THRESHOLDS },
+            salmonVisible: true,
+            migrationPathCount: 0,
+            hasFitBounds: false
+        };
 
-        // 4. Heatmap (Algal Bloom) Logic
+        const map = L.map("map").setView([49.2, -123.1], 8);
+        L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png").addTo(map);
+
+        const salmonLayerGroup = L.layerGroup().addTo(map);
+        let riskGridLayer = null;
         let heatLayer = null;
-        let isHighRisk = false;
 
-        function updateHeatmap() {
-            if (heatLayer) map.removeLayer(heatLayer);
-            
-            const points = isHighRisk 
-                ? [[49.2, -123.2, 1], [54.2, -129.8, 1], [47.1, -65.0, 1]] // Near fish
-                : [[55.0, -140.0, 0.2], [45.0, -50.0, 0.2]]; // Away from fish
+        function setConnectionStatus(message, kind = "info") {
+            const el = document.getElementById("connection-status");
+            const color =
+                kind === "error" ? "#ff4d4d" :
+                kind === "warn" ? "#f1c232" :
+                "#8ad3ff";
+            el.textContent = message;
+            el.style.color = color;
+        }
 
-            heatLayer = L.heatLayer(points, {
-                radius: 40, blur: 20, gradient: isHighRisk ? {0.4: 'orange', 1: 'red'} : {0.4: 'blue', 1: 'cyan'}
+        function mean(values) {
+            if (!values.length) return 0;
+            let sum = 0;
+            for (const value of values) sum += value;
+            return sum / values.length;
+        }
+
+        function parseJson(response) {
+            if (!response.ok) {
+                return response.text().then((body) => {
+                    throw new Error(`HTTP ${response.status}: ${body}`);
+                });
+            }
+            return response.json();
+        }
+
+        function centroidFromPolygon(feature) {
+            const geometry = feature?.geometry;
+            if (!geometry) return null;
+
+            let ring = null;
+            if (geometry.type === "Polygon") {
+                ring = geometry.coordinates?.[0];
+            } else if (geometry.type === "MultiPolygon") {
+                ring = geometry.coordinates?.[0]?.[0];
+            } else if (geometry.type === "Point") {
+                const point = geometry.coordinates;
+                return Array.isArray(point) ? [point[1], point[0]] : null;
+            }
+
+            if (!Array.isArray(ring) || ring.length < 3) {
+                return null;
+            }
+            let lng = 0;
+            let lat = 0;
+            let count = 0;
+            for (let i = 0; i < ring.length; i += 1) {
+                const coord = ring[i];
+                if (!Array.isArray(coord) || coord.length < 2) continue;
+                lng += coord[0];
+                lat += coord[1];
+                count += 1;
+            }
+            if (count === 0) return null;
+            return [lat / count, lng / count];
+        }
+
+        function categoryFromScore(score, thresholds) {
+            if (!Number.isFinite(score) || score <= 0) return "blue";
+            if (score >= (thresholds.infrared ?? 0.85)) return "infrared";
+            if (score >= (thresholds.red ?? 0.65)) return "red";
+            if (score >= (thresholds.yellow ?? 0.30)) return "yellow";
+            return "blue";
+        }
+
+        function colorForCategory(category) {
+            if (category === "infrared") return "#ff00ff";
+            if (category === "red") return "#ff4d4d";
+            if (category === "yellow") return "#f1c232";
+            return "#00d4ff";
+        }
+
+        function styleRiskFeature(feature) {
+            const props = feature?.properties || {};
+            const score = Number(props.risk_score);
+            const category = props.risk_category || categoryFromScore(score, state.thresholds);
+            return {
+                color: colorForCategory(category),
+                weight: 1,
+                opacity: 0.9,
+                fillColor: colorForCategory(category),
+                fillOpacity: 0.30
+            };
+        }
+
+        function renderRiskGrid(featureCollection) {
+            if (riskGridLayer) {
+                map.removeLayer(riskGridLayer);
+                riskGridLayer = null;
+            }
+            riskGridLayer = L.geoJSON(featureCollection, {
+                style: styleRiskFeature,
+                onEachFeature: (feature, layer) => {
+                    const props = feature?.properties || {};
+                    const score = Number(props.risk_score ?? 0);
+                    layer.bindPopup(
+                        `Risk: ${score.toFixed(3)}<br>` +
+                        `Category: ${props.risk_category || "n/a"}<br>` +
+                        `Chlorophyll: ${Number(props.chlorophyll_index_mean ?? 0).toFixed(3)}<br>` +
+                        `Turbidity: ${Number(props.turbidity_index_mean ?? 0).toFixed(3)}<br>` +
+                        `Water fraction: ${(Number(props.water_fraction ?? 0) * 100).toFixed(1)}%`
+                    );
+                }
             }).addTo(map);
         }
 
-        // 5. Button Actions
+        function renderHeatmapFromRisk(featureCollection) {
+            if (heatLayer) {
+                map.removeLayer(heatLayer);
+                heatLayer = null;
+            }
+
+            const points = [];
+            const features = featureCollection?.features || [];
+            for (const feature of features) {
+                const center = centroidFromPolygon(feature);
+                if (!center) continue;
+                const score = Number(feature?.properties?.risk_score);
+                if (!Number.isFinite(score)) continue;
+                points.push([center[0], center[1], Math.min(1, Math.max(0, score))]);
+            }
+
+            if (!points.length) {
+                return;
+            }
+
+            heatLayer = L.heatLayer(points, {
+                radius: 26,
+                blur: 18,
+                maxZoom: 12,
+                gradient: {
+                    0.0: "#00d4ff",
+                    0.30: "#f1c232",
+                    0.65: "#ff4d4d",
+                    0.85: "#ff00ff"
+                }
+            }).addTo(map);
+        }
+
+        function updateRiskIndicator(maxRisk) {
+            const indicator = document.getElementById("risk-indicator");
+            const redThreshold = state.thresholds.red ?? 0.65;
+            const infraredThreshold = state.thresholds.infrared ?? 0.85;
+            const yellowThreshold = state.thresholds.yellow ?? 0.30;
+
+            if (maxRisk >= infraredThreshold) {
+                indicator.textContent = "INFRARED ALERT";
+                indicator.className = "risk-status status-high";
+                return;
+            }
+            if (maxRisk >= redThreshold) {
+                indicator.textContent = "HIGH RISK";
+                indicator.className = "risk-status status-high";
+                return;
+            }
+            if (maxRisk >= yellowThreshold) {
+                indicator.textContent = "ELEVATED RISK";
+                indicator.className = "risk-status status-medium";
+                return;
+            }
+            indicator.textContent = "LOW RISK";
+            indicator.className = "risk-status status-low";
+        }
+
+        function updateDashboardFromFeatures(features) {
+            const scores = [];
+            const chlorophyll = [];
+            const turbidity = [];
+            const waterFractions = [];
+
+            for (const feature of features) {
+                const props = feature?.properties || {};
+                const riskScore = Number(props.risk_score);
+                const ch = Number(props.chlorophyll_index_mean);
+                const turb = Number(props.turbidity_index_mean);
+                const water = Number(props.water_fraction);
+
+                if (Number.isFinite(riskScore)) scores.push(riskScore);
+                if (Number.isFinite(ch)) chlorophyll.push(ch);
+                if (Number.isFinite(turb)) turbidity.push(turb);
+                if (Number.isFinite(water)) waterFractions.push(water);
+            }
+
+            const avgRisk = mean(scores);
+            const maxRisk = scores.length ? Math.max(...scores) : 0;
+            const highRiskCount = scores.filter(
+                (score) => score >= (state.thresholds.red ?? 0.65)
+            ).length;
+
+            document.getElementById("bloom-density").textContent = `${(avgRisk * 100).toFixed(1)}%`;
+            document.getElementById("water-coverage").textContent = `${(mean(waterFractions) * 100).toFixed(1)}%`;
+            document.getElementById("grid-cells").textContent = `${features.length}`;
+            document.getElementById("salmon-path-count").textContent = `${state.migrationPathCount}`;
+            document.getElementById("chloro-val").textContent = `${(Math.max(0, mean(chlorophyll)) * 100).toFixed(1)}%`;
+            document.getElementById("turbid-val").textContent = `${(Math.max(0, mean(turbidity)) * 100).toFixed(1)}%`;
+            document.getElementById("high-risk-val").textContent = `${highRiskCount} / ${scores.length}`;
+            updateRiskIndicator(maxRisk);
+        }
+
+        async function loadMigrationPaths() {
+            salmonLayerGroup.clearLayers();
+            try {
+                const response = await fetch(`${API_BASE}/migration-paths/geojson`);
+                const geojson = await parseJson(response);
+                const layer = L.geoJSON(geojson, {
+                    style: {
+                        color: "gold",
+                        weight: 3,
+                        opacity: 0.9,
+                        dashArray: "10, 10",
+                        className: "salmon-path"
+                    },
+                    onEachFeature: (feature, layerRef) => {
+                        const name = feature?.properties?.name || feature?.id || "Migration Path";
+                        layerRef.bindPopup(name);
+                    }
+                });
+                layer.eachLayer((entry) => salmonLayerGroup.addLayer(entry));
+                state.migrationPathCount = Array.isArray(geojson?.features) ? geojson.features.length : 0;
+                document.getElementById("salmon-path-count").textContent = `${state.migrationPathCount}`;
+            } catch (error) {
+                state.migrationPathCount = 0;
+                setConnectionStatus(`Migration path load failed: ${error.message}`, "warn");
+            }
+        }
+
+        async function fetchRuleTiles() {
+            const paramsRule = new URLSearchParams({ source: "rule" });
+            if (state.lastProcessedSceneId) {
+                paramsRule.set("processed_scene_id", state.lastProcessedSceneId);
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/risk/tiles?${paramsRule.toString()}`);
+                const payload = await parseJson(response);
+                if (payload.processed_scene_id) {
+                    state.lastProcessedSceneId = payload.processed_scene_id;
+                }
+                return payload;
+            } catch (error) {
+                if (!state.sceneId) {
+                    throw error;
+                }
+                const processResponse = await fetch(`${API_BASE}/process/scene`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        scene_id: state.sceneId,
+                        include_grid: true,
+                        grid_block_size: 32
+                    })
+                });
+                const processPayload = await parseJson(processResponse);
+                state.lastProcessedSceneId = processPayload.processed_scene_id;
+                const responseTiles = await fetch(
+                    `${API_BASE}/risk/tiles?source=rule&processed_scene_id=${encodeURIComponent(state.lastProcessedSceneId)}`
+                );
+                return parseJson(responseTiles);
+            }
+        }
+
+        async function fetchModelTiles() {
+            if (!state.sceneId) {
+                throw new Error("Model mode requires a scene_id.");
+            }
+            const predictPayload = {
+                scene_id: state.sceneId,
+                include_grid: true,
+                grid_block_size: 32,
+                force_recompute: false
+            };
+            if (state.modelCheckpoint) {
+                predictPayload.model_checkpoint = state.modelCheckpoint;
+            }
+
+            const predictResponse = await fetch(`${API_BASE}/risk/predict`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(predictPayload)
+            });
+            const predict = await parseJson(predictResponse);
+            state.lastPredictionId = predict.prediction_id;
+
+            const tilesResponse = await fetch(
+                `${API_BASE}/risk/tiles?source=model&prediction_id=${encodeURIComponent(state.lastPredictionId)}`
+            );
+            return parseJson(tilesResponse);
+        }
+
+        async function loadAndRenderRiskData() {
+            setConnectionStatus(
+                `Loading ${state.useModelSource ? "model" : "rule"} data from ${API_BASE}...`,
+                "info"
+            );
+
+            const sourceButton = document.getElementById("source-toggle");
+            sourceButton.textContent = state.useModelSource
+                ? "Switch to Rule Source"
+                : "Switch to Model Source";
+
+            let payload = null;
+            let sourceUsed = state.useModelSource ? "model" : "rule";
+
+            try {
+                payload = state.useModelSource
+                    ? await fetchModelTiles()
+                    : await fetchRuleTiles();
+            } catch (primaryError) {
+                try {
+                    payload = state.useModelSource
+                        ? await fetchRuleTiles()
+                        : await fetchModelTiles();
+                    sourceUsed = state.useModelSource ? "rule (fallback)" : "model (fallback)";
+                } catch (secondaryError) {
+                    throw new Error(
+                        `Primary source failed: ${primaryError.message} | Fallback failed: ${secondaryError.message}`
+                    );
+                }
+            }
+
+            const featureCollection = payload?.features;
+            if (!featureCollection || featureCollection.type !== "FeatureCollection") {
+                throw new Error("Risk payload did not include a valid FeatureCollection.");
+            }
+            const features = Array.isArray(featureCollection.features) ? featureCollection.features : [];
+            if (!features.length) {
+                throw new Error("Risk payload returned zero features.");
+            }
+
+            state.thresholds = { ...DEFAULT_THRESHOLDS, ...(payload.thresholds || {}) };
+            renderRiskGrid(featureCollection);
+            renderHeatmapFromRisk(featureCollection);
+            updateDashboardFromFeatures(features);
+
+            if (!state.hasFitBounds && riskGridLayer) {
+                const bounds = riskGridLayer.getBounds();
+                if (bounds.isValid()) {
+                    map.fitBounds(bounds.pad(0.05));
+                    state.hasFitBounds = true;
+                }
+            }
+
+            setConnectionStatus(
+                `Live data loaded (${sourceUsed}). scene=${payload.scene_id || "unknown"}`,
+                "info"
+            );
+        }
+
         function toggleSalmon() {
             if (map.hasLayer(salmonLayerGroup)) {
                 map.removeLayer(salmonLayerGroup);
+                state.salmonVisible = false;
             } else {
                 map.addLayer(salmonLayerGroup);
+                state.salmonVisible = true;
             }
         }
 
-        function toggleRisk() {
-            isHighRisk = !isHighRisk;
-            const indicator = document.getElementById('risk-indicator');
-            const density = document.getElementById('bloom-density');
-            
-            if (isHighRisk) {
-                indicator.textContent = "CRITICAL RISK";
-                indicator.className = "risk-status status-high";
-                density.textContent = "87%";
-            } else {
-                indicator.textContent = "LOW RISK";
-                indicator.className = "risk-status status-low";
-                density.textContent = "12%";
+        async function toggleRisk() {
+            state.useModelSource = !state.useModelSource;
+            try {
+                await loadAndRenderRiskData();
+            } catch (error) {
+                setConnectionStatus(`Load failed: ${error.message}`, "error");
             }
-            updateHeatmap();
         }
 
-        // Initialize
-        updateHeatmap();
+        function applySceneId() {
+            const input = document.getElementById("scene-id-input");
+            const value = input.value.trim();
+            state.sceneId = value || null;
+            state.lastProcessedSceneId = null;
+            state.lastPredictionId = null;
+            state.hasFitBounds = false;
+            refreshLive();
+        }
+
+        async function refreshLive() {
+            try {
+                await loadAndRenderRiskData();
+            } catch (error) {
+                setConnectionStatus(`Load failed: ${error.message}`, "error");
+            }
+        }
+
+        document.getElementById("scene-id-input").value = state.sceneId || "";
+
+        window.toggleSalmon = toggleSalmon;
+        window.toggleRisk = toggleRisk;
+        window.applySceneId = applySceneId;
+        window.refreshLive = refreshLive;
+
+        (async () => {
+            await loadMigrationPaths();
+            await refreshLive();
+        })();
     </script>
 </body>
 </html>

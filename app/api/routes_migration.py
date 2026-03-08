@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, Depends
 
 from app.api.dependencies import get_services
@@ -15,4 +17,11 @@ def list_migration_paths(
 ) -> MigrationPathsResponse:
     paths = [MigrationPathItem(**path) for path in services.migration_service.list_paths()]
     return MigrationPathsResponse(count=len(paths), paths=paths)
+
+
+@router.get("/migration-paths/geojson")
+def migration_paths_geojson(
+    services: AppServices = Depends(get_services),
+) -> dict[str, Any]:
+    return services.migration_service.load_feature_collection()
 
