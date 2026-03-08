@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EcoWatch: Algal Bloom & Salmon Migration</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <style>
+        :root {
+            --bg-dark: #121212;
+            --panel-bg: rgba(20, 20, 20, 0.9);
+            --text-main: #ffffff; /* Increased contrast (brighter white) */
+            --text-muted: #b3b3b3; /* Increased contrast slightly */
+            --risk-high: #ff4d4d;
+            --risk-low: #00d4ff;
+            --border-color: #444; /* Standardized border color */
+            --radius-main: 8px;   /* Standardized corner roundness */
+        }
+
+        body { background-color: var(--bg-dark); color: var(--text-main); margin: 0; overflow: hidden; font-family: sans-serif; }
+        #map { height: 100vh; width: 100vw; z-index: 1; }
+
+        .dashboard-overlay {
+            position: absolute; top: 20px; right: 20px; width: 320px;
+            background: var(--panel-bg); backdrop-filter: blur(10px);
+            border-radius: var(--radius-main); padding: 20px; z-index: 1000;
+            border: 1px solid var(--border-color); box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+        }
+
+        .metric-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
+        .metric-card { background: rgba(255,255,255,0.05); padding: 12px; border-radius: var(--radius-main); text-align: center; }
+        .metric-value { font-size: 1.4rem; font-weight: bold; display: block; margin-bottom: 2px; }
+        .metric-label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+
+        .risk-status { padding: 12px; border-radius: var(--radius-main); text-align: center; font-weight: bold; margin-bottom: 20px; letter-spacing: 1px; }
+        .status-low { background: rgba(0, 212, 255, 0.1); color: var(--risk-low); border: 1px solid var(--risk-low); }
+        .status-high { background: rgba(255, 77, 77, 0.1); color: var(--risk-high); border: 1px solid var(--risk-high); }
+
+        .controls { display: flex; flex-direction: column; gap: 10px; }
+        button {
+            padding: 12px; background: #333; color: white; border: 1px solid var(--border-color);
+            border-radius: var(--radius-main); cursor: pointer; transition: 0.2s; font-weight: bold;
+        }
+        button:hover { background: #444; border-color: #666; }
+
+        /* --- STYLES FOR THE HELP DROPDOWN --- */
+        .help-dropdown { 
+            display: flex; flex-direction: column; 
+            margin-top: 5px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-main);
+        }
+        
+        .help-dropdown summary {
+            padding: 12px; cursor: pointer; font-size: 0.85rem; font-weight: bold;
+            background: #2a2a2a; border-radius: var(--radius-main); list-style: none; user-select: none;
+            text-align: center; transition: 0.2s;
+        }
+        .help-dropdown summary:hover { background: #333; }
+
+        .help-content {
+            padding: 15px; font-size: 0.85rem; color: var(--text-muted);
+            line-height: 1.6; border-top: 1px solid var(--border-color);
+            text-align: left; /* Kept text left-aligned for readability */
+        }
+
+        .help-content p { margin: 0 0 10px 0; }
+        .help-content p:last-child { margin: 0; }:root {
+            --bg-dark: #121212;
+            --panel-bg: rgba(20, 20, 20, 0.9);
+            --text-main: #ffffff; /* Increased contrast (brighter white) */
+            --text-muted: #b3b3b3; /* Increased contrast slightly */
+            --risk-high: #ff4d4d;
+            --risk-low: #00d4ff;
+            --border-color: #444; /* Standardized border color */
+            --radius-main: 8px;   /* Standardized corner roundness */
+        }
+
+        body { background-color: var(--bg-dark); color: var(--text-main); margin: 0; overflow: hidden; font-family: sans-serif; }
+        #map { height: 100vh; width: 100vw; z-index: 1; }
+
+        .dashboard-overlay {
+            position: absolute; top: 20px; right: 20px; width: 320px;
+            background: var(--panel-bg); backdrop-filter: blur(10px);
+            border-radius: var(--radius-main); padding: 20px; z-index: 1000;
+            border: 1px solid var(--border-color); box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+        }
+
+        .metric-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
+        .metric-card { background: rgba(255,255,255,0.05); padding: 12px; border-radius: var(--radius-main); text-align: center; }
+        .metric-value { font-size: 1.4rem; font-weight: bold; display: block; margin-bottom: 2px; }
+        .metric-label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+
+        .risk-status { padding: 12px; border-radius: var(--radius-main); text-align: center; font-weight: bold; margin-bottom: 20px; letter-spacing: 1px; }
+        .status-low { background: rgba(0, 212, 255, 0.1); color: var(--risk-low); border: 1px solid var(--risk-low); }
+        .status-high { background: rgba(255, 77, 77, 0.1); color: var(--risk-high); border: 1px solid var(--risk-high); }
+
+        .controls { display: flex; flex-direction: column; gap: 10px; }
+        button {
+            padding: 12px; background: #333; color: white; border: 1px solid var(--border-color);
+            border-radius: var(--radius-main); cursor: pointer; transition: 0.2s; font-weight: bold;
+        }
+        button:hover { background: #444; border-color: #666; }
+
+        /* --- STYLES FOR THE HELP DROPDOWN --- */
+        .help-dropdown { 
+            display: flex; flex-direction: column; 
+            margin-top: 5px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-main);
+        }
+        
+        .help-dropdown summary {
+            padding: 12px; cursor: pointer; font-size: 0.85rem; font-weight: bold;
+            background: #2a2a2a; border-radius: var(--radius-main); list-style: none; user-select: none;
+            text-align: center; transition: 0.2s;
+        }
+        .help-dropdown summary:hover { background: #333; }
+
+        .help-content {
+            padding: 15px; font-size: 0.85rem; color: var(--text-muted);
+            line-height: 1.6; border-top: 1px solid var(--border-color);
+            text-align: left; /* Kept text left-aligned for readability */
+        }
+
+        .help-content p { margin: 0 0 10px 0; }
+        .help-content p:last-child { margin: 0; }
+        /* ---------------------------------------- */
+
+        @keyframes swim { to { stroke-dashoffset: -20px; } }
+        .salmon-path { animation: swim 1s linear infinite; }
+    </style>
+</head>
+<body>
+
+    <div class="dashboard-overlay">
+        <h2 style="font-size: 1.1rem; margin-bottom: 5px;">EcoWatch Live</h2>
+        <div id="risk-indicator" class="risk-status status-low">LOW RISK</div>
+        
+        <div class="metric-grid">
+            <div class="metric-card"><span class="metric-value" id="bloom-density">12%</span><span class="metric-label">Bloom</span></div>
+            <div class="metric-card"><span class="metric-value">12k</span><span class="metric-label">Salmon</span></div>
+        </div>
+
+        <div class="controls">
+            <button onclick="toggleSalmon()">🐟 Show/Hide Salmon</button>
+            <button onclick="toggleRisk()">⚠️ Toggle Risk Level</button>
+            
+            <details class="help-dropdown">
+                <summary>Help & Documentation</summary>
+                <div class="help-content">
+                    <p><strong>What is this map?</strong><br>
+                    This dashboard tracks the overlap between harmful Algal Blooms and Salmon migration routes.</p>
+                    <p><strong>🐟 Show/Hide Salmon:</strong><br>
+                    Click to reveal or hide the yellow migration paths.</p>
+                    <p><strong>⚠️ Toggle Risk Level:</strong><br>
+                    Click to see what happens when Algal Blooms grow from a Low Risk (Blue) to a Critical Risk (Red).</p>
+                </div>
+            </details>
+        </div>
+    </div>
+
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+
+    <script>
+        // 1. Setup Map
+        const map = L.map('map').setView([54.0, -100.0], 4);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
+
+        // 2. Data
+        const salmonPaths = [
+            { name: "Fraser River", path: [[49.25, -123.18], [49.20, -122.55], [49.38, -121.44]] },
+            { name: "Skeena River", path: [[54.15, -130.00], [54.50, -128.60], [55.25, -127.60]] },
+            { name: "Miramichi River", path: [[47.20, -64.50], [47.05, -65.50], [46.65, -66.35]] },
+            { name: "Humber River", path: [[49.40, -58.60], [49.10, -58.10], [49.25, -57.40]] }
+        ];
+
+        // 3. Create Salmon Layer
+        const salmonLayerGroup = L.layerGroup();
+        salmonPaths.forEach(route => {
+            L.polyline(route.path, {
+                color: 'gold', weight: 3, opacity: 0.8, dashArray: '10, 10', className: 'salmon-path'
+            }).addTo(salmonLayerGroup).bindPopup(route.name);
+        });
+        salmonLayerGroup.addTo(map); // Start with fish visible
+
+        // 4. Heatmap (Algal Bloom) Logic
+        let heatLayer = null;
+        let isHighRisk = false;
+
+        function updateHeatmap() {
+            if (heatLayer) map.removeLayer(heatLayer);
+            
+            const points = isHighRisk 
+                ? [[49.2, -123.2, 1], [54.2, -129.8, 1], [47.1, -65.0, 1]] // Near fish
+                : [[55.0, -140.0, 0.2], [45.0, -50.0, 0.2]]; // Away from fish
+
+            heatLayer = L.heatLayer(points, {
+                radius: 40, blur: 20, gradient: isHighRisk ? {0.4: 'orange', 1: 'red'} : {0.4: 'blue', 1: 'cyan'}
+            }).addTo(map);
+        }
+
+        // 5. Button Actions
+        function toggleSalmon() {
+            if (map.hasLayer(salmonLayerGroup)) {
+                map.removeLayer(salmonLayerGroup);
+            } else {
+                map.addLayer(salmonLayerGroup);
+            }
+        }
+
+        function toggleRisk() {
+            isHighRisk = !isHighRisk;
+            const indicator = document.getElementById('risk-indicator');
+            const density = document.getElementById('bloom-density');
+            
+            if (isHighRisk) {
+                indicator.textContent = "CRITICAL RISK";
+                indicator.className = "risk-status status-high";
+                density.textContent = "87%";
+            } else {
+                indicator.textContent = "LOW RISK";
+                indicator.className = "risk-status status-low";
+                density.textContent = "12%";
+            }
+            updateHeatmap();
+        }
+
+        // Initialize
+        updateHeatmap();
+    </script>
+</body>
+</html>

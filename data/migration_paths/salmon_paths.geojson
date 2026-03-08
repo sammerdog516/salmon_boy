@@ -3,26 +3,9 @@
   "features": [
     {
       "type": "Feature",
-      "id": "columbia-mainstem",
+      "id": "fraser-river-main",
       "properties": {
-        "name": "Columbia Mainstem"
-      },
-      "geometry": {
-        "type": "LineString",
-        "coordinates": [
-          [-123.95, 46.20],
-          [-123.10, 46.25],
-          [-122.45, 45.75],
-          [-121.55, 45.65],
-          [-120.50, 46.15]
-        ]
-      }
-    },
-    {
-      "type": "Feature",
-      "id": "fraser-river",
-      "properties": {
-        "name": "Fraser River Corridor"
+        "name": "Fraser River Main Corridor"
       },
       "geometry": {
         "type": "LineString",
@@ -31,10 +14,59 @@
           [-122.95, 49.20],
           [-122.55, 49.15],
           [-122.15, 49.20],
-          [-121.85, 49.28]
+          [-121.85, 49.28],
+          [-121.44, 49.38]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "johnstone-strait",
+      "properties": {
+        "name": "Johnstone Strait Ocean Highway"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-126.85, 50.55],
+          [-126.50, 50.45],
+          [-126.10, 50.35],
+          [-125.75, 50.30]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "skeena-river",
+      "properties": {
+        "name": "Skeena River Route"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-130.00, 54.15],
+          [-129.50, 54.25],
+          [-128.60, 54.50],
+          [-128.15, 54.80],
+          [-127.60, 55.25]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "thompson-river",
+      "properties": {
+        "name": "Thompson River Spawning Grounds"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-121.55, 50.23],
+          [-121.20, 50.40],
+          [-120.80, 50.60],
+          [-120.30, 50.68]
         ]
       }
     }
   ]
 }
-
