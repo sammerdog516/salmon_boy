@@ -8,6 +8,7 @@ from app.services.ingestion.sentinel_provider import SentinelSceneProvider
 from app.services.ingestion.service import IngestionService
 from app.services.migration.loader import MigrationPathService
 from app.services.processing.service import ProcessingService
+from app.services.storage.cache_manager import CacheManager
 from app.services.storage.metadata_store import MetadataStore
 from app.services.training.prithvi import PrithviTrainingService
 
@@ -15,6 +16,7 @@ from app.services.training.prithvi import PrithviTrainingService
 @dataclass
 class AppServices:
     settings: Settings
+    cache_manager: CacheManager
     metadata_store: MetadataStore
     migration_service: MigrationPathService
     ingestion_service: IngestionService
@@ -23,6 +25,7 @@ class AppServices:
 
 
 def build_services(settings: Settings) -> AppServices:
+    cache_manager = CacheManager(settings=settings)
     metadata_store = MetadataStore(
         scene_registry_path=settings.resolve_path(settings.scene_registry_path),
         processed_registry_path=settings.resolve_path(settings.processed_registry_path),
@@ -33,6 +36,7 @@ def build_services(settings: Settings) -> AppServices:
     )
     ingestion_service = IngestionService(
         metadata_store=metadata_store,
+        cache_manager=cache_manager,
         local_provider=LocalSceneProvider(project_root=settings.project_root),
         sentinel_provider=SentinelSceneProvider(
             api_url=settings.sentinel_api_url, api_key=settings.sentinel_api_key
@@ -40,6 +44,7 @@ def build_services(settings: Settings) -> AppServices:
     )
     processing_service = ProcessingService(
         settings=settings,
+        cache_manager=cache_manager,
         metadata_store=metadata_store,
         migration_service=migration_service,
     )
@@ -49,10 +54,10 @@ def build_services(settings: Settings) -> AppServices:
     )
     return AppServices(
         settings=settings,
+        cache_manager=cache_manager,
         metadata_store=metadata_store,
         migration_service=migration_service,
         ingestion_service=ingestion_service,
         processing_service=processing_service,
         training_service=training_service,
     )
-

@@ -68,7 +68,8 @@ def test_ingest_and_process_scene_smoke(client, tmp_path: Path) -> None:
     assert "summary" in process_payload
     assert process_payload["summary"]["valid_water_pixels"] > 0
     assert "artifact_paths" in process_payload
-    assert Path(process_payload["artifact_paths"]["risk_normalized_tif"]).exists()
+    assert Path(process_payload["artifact_paths"]["derived_npz"]).exists()
+    assert Path(process_payload["artifact_paths"]["summary_json"]).exists()
 
     tiles_response = client.get(
         "/risk/tiles",
@@ -77,4 +78,3 @@ def test_ingest_and_process_scene_smoke(client, tmp_path: Path) -> None:
     assert tiles_response.status_code == 200, tiles_response.text
     tiles_payload = tiles_response.json()
     assert tiles_payload["features"]["type"] == "FeatureCollection"
-

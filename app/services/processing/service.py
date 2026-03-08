@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from datetime import UTC, datetime
 from pathlib import Path
@@ -7,10 +8,10 @@ from typing import Any
 from uuid import uuid4
 
 import numpy as np
-import rasterio
+from shapely.geometry import shape
 
 from app.core.config import Settings
-from app.core.constants import REQUIRED_SENTINEL_BANDS
+from app.core.constants import OPTIONAL_SENTINEL_BANDS, REQUIRED_SENTINEL_BANDS
 from app.services.migration.loader import MigrationPathService
 from app.services.migration.summarizer import summarize_grid_near_paths
 from app.services.processing.grid import aggregate_raster_to_grid_geojson
@@ -18,17 +19,21 @@ from app.services.processing.indices import chlorophyll_index, ndwi_index, turbi
 from app.services.processing.raster import RasterBundle, load_and_align_bands
 from app.services.processing.risk import score_risk, summarize_risk, temperature_proxy_stub
 from app.services.processing.water_mask import compute_water_mask
+from app.services.storage.cache_manager import CacheManager
 from app.services.storage.metadata_store import MetadataStore
+from app.utils.geospatial import buffer_geometry_meters
 
 
 class ProcessingService:
     def __init__(
         self,
         settings: Settings,
+        cache_manager: CacheManager,
         metadata_store: MetadataStore,
         migration_service: MigrationPathService,
     ) -> None:
         self.settings = settings
+        self.cache_manager = cache_manager
         self.metadata_store = metadata_store
         self.migration_service = migration_service
 
@@ -53,6 +58,7 @@ class ProcessingService:
         return self.process_assets(
             scene_id=scene_id,
             assets={str(k): str(v) for k, v in assets.items()},
+            scene_metadata=scene,
             aoi_bbox=aoi_bbox,
             aoi_crs=aoi_crs,
             include_grid=include_grid,
@@ -66,6 +72,7 @@ class ProcessingService:
         self,
         scene_id: str,
         assets: dict[str, str],
+        scene_metadata: dict[str, Any] | None = None,
         aoi_bbox: list[float] | None = None,
         aoi_crs: str = "EPSG:4326",
         include_grid: bool = True,
@@ -74,15 +81,71 @@ class ProcessingService:
         migration_buffer_meters: float | None = None,
         persist: bool = True,
     ) -> dict[str, Any]:
-        raster_bundle = load_and_align_bands(
-            assets=assets,
-            required_bands=REQUIRED_SENTINEL_BANDS,
+        block_size = grid_block_size or self.settings.default_grid_block_size
+        effective_bbox, effective_bbox_crs = self._resolve_processing_bbox(
+            scene_metadata=scene_metadata,
             aoi_bbox=aoi_bbox,
             aoi_crs=aoi_crs,
+            migration_path_id=migration_path_id,
+            migration_buffer_meters=migration_buffer_meters,
+        )
+        cache_key = self._build_cache_key(
+            scene_id=scene_id,
+            scene_metadata=scene_metadata,
+            assets=assets,
+            bbox=effective_bbox,
+            grid_block_size=block_size,
+        )
+
+        if persist:
+            cached = self.cache_manager.load_derived_cache(
+                cache_key=cache_key,
+                include_grid=include_grid,
+            )
+            if cached is not None:
+                return self._response_from_cached_derived(
+                    cache_key=cache_key,
+                    scene_id=scene_id,
+                    cached=cached,
+                    include_grid=include_grid,
+                    migration_path_id=migration_path_id,
+                    migration_buffer_meters=migration_buffer_meters,
+                    persist=persist,
+                )
+
+        processing_assets = dict(assets)
+        clipped_cache_hit = False
+        if effective_bbox is not None and effective_bbox_crs is not None:
+            optional_bands = tuple(
+                band for band in OPTIONAL_SENTINEL_BANDS if band in processing_assets
+            )
+            cached_clipped = self.cache_manager.get_cached_clipped_assets(
+                cache_key=cache_key,
+                required_bands=REQUIRED_SENTINEL_BANDS,
+                optional_bands=optional_bands,
+            )
+            if cached_clipped is None:
+                processing_assets = self.cache_manager.cache_clipped_assets(
+                    cache_key=cache_key,
+                    source_assets=processing_assets,
+                    bbox=effective_bbox,
+                    aoi_crs=effective_bbox_crs,
+                    required_bands=REQUIRED_SENTINEL_BANDS,
+                    optional_bands=optional_bands,
+                )
+            else:
+                processing_assets = cached_clipped
+                clipped_cache_hit = True
+
+        raster_bundle = load_and_align_bands(
+            assets=processing_assets,
+            required_bands=REQUIRED_SENTINEL_BANDS,
+            aoi_bbox=None if effective_bbox is not None else aoi_bbox,
+            aoi_crs=effective_bbox_crs or aoi_crs,
         )
         features = self._compute_features(raster_bundle)
 
-        risk_raw, risk_normalized = score_risk(
+        _, risk_normalized = score_risk(
             chlorophyll=features["chlorophyll"],
             turbidity=features["turbidity"],
             temperature=features["temperature_proxy"],
@@ -100,7 +163,6 @@ class ProcessingService:
             else 0.0
         )
 
-        block_size = grid_block_size or self.settings.default_grid_block_size
         grid = (
             aggregate_raster_to_grid_geojson(
                 risk=risk_normalized,
@@ -133,15 +195,20 @@ class ProcessingService:
         processed_scene_id = f"proc-{uuid4().hex[:12]}"
         artifact_paths: dict[str, str] = {}
         if persist:
-            artifact_paths = self._persist_artifacts(
-                processed_scene_id=processed_scene_id,
+            artifact_paths = self.cache_manager.save_derived_cache(
+                cache_key=cache_key,
                 scene_id=scene_id,
-                raster_bundle=raster_bundle,
+                chlorophyll=features["chlorophyll"],
+                turbidity=features["turbidity"],
+                ndwi=features["ndwi"],
                 risk_normalized=risk_normalized,
-                risk_raw=risk_raw,
                 summary=summary,
+                thresholds=self.settings.heatmap_thresholds,
                 grid=grid,
             )
+            artifact_paths["cache_key"] = cache_key
+            if effective_bbox is not None:
+                artifact_paths["clipped_cache_dir"] = str(self.cache_manager.clipped_dir / cache_key)
             self.metadata_store.save_processed_scene(
                 processed_scene_id,
                 {
@@ -152,6 +219,9 @@ class ProcessingService:
                     "artifact_paths": artifact_paths,
                     "has_grid": grid is not None,
                     "path_summary": path_summary,
+                    "cache_key": cache_key,
+                    "cache_hit": False,
+                    "clip_cache_hit": clipped_cache_hit,
                 },
             )
 
@@ -202,63 +272,125 @@ class ProcessingService:
             "temperature_proxy": temperature,
         }
 
-    def _persist_artifacts(
+    def _response_from_cached_derived(
         self,
-        processed_scene_id: str,
+        cache_key: str,
         scene_id: str,
-        raster_bundle: RasterBundle,
-        risk_normalized: np.ndarray,
-        risk_raw: np.ndarray,
-        summary: dict[str, Any],
-        grid: dict[str, Any] | None,
-    ) -> dict[str, str]:
-        output_dir = self.settings.resolve_path(self.settings.artifacts_dir) / "processed" / processed_scene_id
-        output_dir.mkdir(parents=True, exist_ok=True)
+        cached: dict[str, Any],
+        include_grid: bool,
+        migration_path_id: str | None,
+        migration_buffer_meters: float | None,
+        persist: bool,
+    ) -> dict[str, Any]:
+        grid = cached["grid"] if include_grid else None
+        summary = cached["summary"]
 
-        risk_path = output_dir / "risk_normalized.tif"
-        self._write_risk_geotiff(risk_path, risk_normalized, raster_bundle)
+        path_summary = None
+        if grid and migration_path_id:
+            path_feature = self.migration_service.get_path_feature(migration_path_id)
+            if path_feature is None:
+                raise ValueError(f"Migration path not found: {migration_path_id}")
+            buffer_meters = migration_buffer_meters or self.settings.default_migration_buffer_meters
+            grid, path_summary = summarize_grid_near_paths(
+                grid_feature_collection=grid,
+                path_features=[path_feature],
+                buffer_meters=buffer_meters,
+                selected_path_id=migration_path_id,
+            )
 
-        risk_raw_path = output_dir / "risk_raw.tif"
-        self._write_risk_geotiff(risk_raw_path, risk_raw, raster_bundle)
-
-        summary_path = output_dir / "summary.json"
-        summary_payload = {
+        processed_scene_id = f"proc-{uuid4().hex[:12]}"
+        artifact_paths = dict(cached["artifact_paths"])
+        artifact_paths["cache_key"] = cache_key
+        if persist:
+            self.metadata_store.save_processed_scene(
+                processed_scene_id,
+                {
+                    "processed_scene_id": processed_scene_id,
+                    "scene_id": scene_id,
+                    "created_at": datetime.now(UTC).isoformat(),
+                    "summary": summary,
+                    "artifact_paths": artifact_paths,
+                    "has_grid": grid is not None,
+                    "path_summary": path_summary,
+                    "cache_key": cache_key,
+                    "cache_hit": True,
+                },
+            )
+        return {
             "processed_scene_id": processed_scene_id,
             "scene_id": scene_id,
             "summary": summary,
-            "thresholds": self.settings.heatmap_thresholds,
+            "artifact_paths": artifact_paths,
+            "grid": grid,
+            "path_summary": path_summary,
         }
-        summary_path.write_text(json.dumps(summary_payload, indent=2), encoding="utf-8")
 
-        artifacts = {
-            "risk_normalized_tif": str(risk_path),
-            "risk_raw_tif": str(risk_raw_path),
-            "summary_json": str(summary_path),
-        }
-        if grid is not None:
-            grid_path = output_dir / "grid.geojson"
-            grid_path.write_text(json.dumps(grid, indent=2), encoding="utf-8")
-            artifacts["grid_geojson"] = str(grid_path)
-        return artifacts
-
-    def _write_risk_geotiff(
+    def _resolve_processing_bbox(
         self,
-        destination: Path,
-        array: np.ndarray,
-        raster_bundle: RasterBundle,
-    ) -> None:
-        nodata_value = -9999.0
-        writable = np.where(np.isfinite(array), array, nodata_value).astype(np.float32)
-        with rasterio.open(
-            destination,
-            "w",
-            driver="GTiff",
-            height=raster_bundle.height,
-            width=raster_bundle.width,
-            count=1,
-            dtype="float32",
-            crs=raster_bundle.crs,
-            transform=raster_bundle.transform,
-            nodata=nodata_value,
-        ) as dst:
-            dst.write(writable, 1)
+        scene_metadata: dict[str, Any] | None,
+        aoi_bbox: list[float] | None,
+        aoi_crs: str,
+        migration_path_id: str | None,
+        migration_buffer_meters: float | None,
+    ) -> tuple[list[float] | None, str | None]:
+        if aoi_bbox is not None:
+            if len(aoi_bbox) != 4:
+                raise ValueError("aoi_bbox must be [minx, miny, maxx, maxy].")
+            return [float(v) for v in aoi_bbox], aoi_crs
+
+        if migration_path_id:
+            feature = self.migration_service.get_path_feature(migration_path_id)
+            if feature is None:
+                raise ValueError(f"Migration path not found: {migration_path_id}")
+            geometry = shape(feature["geometry"])
+            buffered = buffer_geometry_meters(
+                geometry_wgs84=geometry,
+                buffer_meters=(
+                    migration_buffer_meters or self.settings.default_migration_buffer_meters
+                ),
+            )
+            minx, miny, maxx, maxy = buffered.bounds
+            return [float(minx), float(miny), float(maxx), float(maxy)], "EPSG:4326"
+
+        if scene_metadata:
+            bbox = scene_metadata.get("bbox")
+            if isinstance(bbox, list) and len(bbox) == 4:
+                return [float(v) for v in bbox], "EPSG:4326"
+        return None, None
+
+    def _build_cache_key(
+        self,
+        scene_id: str,
+        scene_metadata: dict[str, Any] | None,
+        assets: dict[str, str],
+        bbox: list[float] | None,
+        grid_block_size: int,
+    ) -> str:
+        dataset = self.settings.cache_default_dataset
+        if scene_metadata and scene_metadata.get("provider") == "sentinel":
+            dataset = "sentinel2"
+
+        date_source = None
+        if scene_metadata:
+            date_source = scene_metadata.get("acquired_date") or scene_metadata.get("created_at")
+        if isinstance(date_source, str) and "T" in date_source:
+            date_source = date_source.split("T")[0]
+        if not date_source:
+            date_source = datetime.now(UTC).date().isoformat()
+
+        resolution_label = f"native-g{grid_block_size}"
+        if bbox is None:
+            stable_assets = json.dumps(
+                {k: assets[k] for k in sorted(assets.keys())},
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            assets_hash = hashlib.sha1(stable_assets.encode("utf-8")).hexdigest()[:6]
+            resolution_label = f"{resolution_label}-{assets_hash}"
+
+        return self.cache_manager.build_cache_key(
+            dataset=dataset,
+            date_str=str(date_source),
+            bbox=bbox,
+            resolution=resolution_label,
+        )

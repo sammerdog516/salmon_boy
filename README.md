@@ -8,6 +8,7 @@ This repository is optimized for an end-to-end local demo:
 - water-only risk scoring (`0..1`)
 - heatmap-ready GeoJSON grid output
 - migration-path-aware risk summaries
+- 3-layer deterministic cache with size cap + eviction
 - Prithvi model training scaffold (non-blocking)
 
 ## What Is Implemented Now
@@ -28,6 +29,11 @@ This repository is optimized for an end-to-end local demo:
 - GeoJSON grid aggregation with risk category metadata for frontend heatmaps
 - Migration path loading from static GeoJSON + buffered intersection summary
 - Artifact persistence (GeoTIFF + JSON + GeoJSON) and local registry tracking
+- Cache policy:
+  - tiny metadata cache (`cache/metadata`)
+  - clipped-band cache (`cache/clipped`)
+  - derived risk cache (`cache/derived`, `cache/tiles`)
+  - deterministic cache keys and oldest-first eviction
 
 ### Scaffolded (future-facing)
 - `provider=sentinel` remote ingestion interface exists but is intentionally stubbed
@@ -83,6 +89,40 @@ data/
 artifacts/
 tests/
 ```
+
+## Cache Strategy (3 Layers)
+
+The backend now uses only these cache layers under `artifacts/cache/`:
+
+1. `metadata/` (tiny JSON records)
+- stores `scene_id`, `bbox`, `date`, `cloud_cover`, `source_urls`, `request_hash`
+- avoids repeated ingestion/search calls for identical requests
+
+2. `clipped/` (clip-first band cache)
+- stores only corridor/AOI-clipped bands
+- stores only required Sentinel bands (`B3`, `B4`, `B5`, `B8`) and optional `B2` if present
+- writes compressed GeoTIFFs (LZW), optional downsample via `CLIPPED_CACHE_MAX_DIMENSION`
+- never stores full scenes in clipped cache
+
+3. `derived/` and `tiles/` (demo-ready outputs)
+- `derived/*.npz`: chlorophyll, turbidity, NDWI, normalized risk arrays
+- `derived/*.summary.json`: summary and thresholds
+- `tiles/*.geojson`: heatmap-ready polygons
+
+### Deterministic Cache Key
+
+Format:
+
+`{dataset}_{date}_{bboxhash}_{resolution}`
+
+Example:
+
+`sentinel2_2026-03-07_a13f92_native-g32`
+
+### Eviction Policy
+
+- configurable max cache size (`CACHE_MAX_SIZE_GB`, default `10`)
+- oldest files removed first from clipped/derived/tile layers
 
 ## Data Flow
 
@@ -184,6 +224,7 @@ curl "http://localhost:8000/risk/tiles?processed_scene_id=proc-abc123"
 See `.env.example` for full list. Core settings include:
 - app runtime (`APP_NAME`, `ENVIRONMENT`, `HOST`, `PORT`)
 - storage and registry paths
+- cache cap and clipping controls (`CACHE_MAX_SIZE_GB`, `CLIPPED_CACHE_MAX_DIMENSION`)
 - migration path file path
 - NDWI and heatmap thresholds
 - Sentinel API placeholders (stub integration)
@@ -216,3 +257,4 @@ Tests include:
 - Temperature proxy is a stub (`0.0`) to keep MVP deterministic and lightweight.
 - Prithvi training endpoints track/scaffold jobs; real fine-tuning is not implemented here.
 - `/risk/tiles` returns GeoJSON grid features (not XYZ tile server), which is intentional for fast frontend integration.
+- Metadata cache uses JSON files for hackathon simplicity; SQLite is an easy future swap if concurrency grows.

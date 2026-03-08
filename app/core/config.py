@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     heatmap_infrared_threshold: float = 0.85
     default_grid_block_size: int = 32
     default_migration_buffer_meters: float = 250.0
+    cache_max_size_gb: float = 10.0
+    clipped_cache_max_dimension: int = 2048
+    cache_default_dataset: str = "sentinel2"
 
     default_aoi_bbox: str | None = None
 
@@ -59,9 +62,14 @@ class Settings(BaseSettings):
         return (self.project_root / candidate).resolve()
 
     def ensure_directories(self) -> None:
+        cache_root = self.resolve_path(self.cache_dir)
         directories = {
             self.resolve_path(self.artifacts_dir),
-            self.resolve_path(self.cache_dir),
+            cache_root,
+            cache_root / "metadata",
+            cache_root / "clipped",
+            cache_root / "derived",
+            cache_root / "tiles",
             self.resolve_path(self.scene_registry_path).parent,
             self.resolve_path(self.processed_registry_path).parent,
             self.resolve_path(self.training_registry_path).parent,
@@ -94,4 +102,3 @@ def get_settings() -> Settings:
     settings = Settings()
     settings.ensure_directories()
     return settings
-
