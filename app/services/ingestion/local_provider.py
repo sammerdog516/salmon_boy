@@ -11,6 +11,8 @@ from app.utils.bands import normalize_band_name
 
 
 class LocalSceneProvider:
+    SAMPLE_SCENE_VERSION = "v3-risk-contrast"
+
     def __init__(self, project_root: Path) -> None:
         self.project_root = project_root
 
@@ -33,6 +35,9 @@ class LocalSceneProvider:
                     generated_sample = True
                 else:
                     raise FileNotFoundError(f"Scene directory not found: {scene_dir}")
+            if self._is_sample_scene_path(raw_scene_dir):
+                if self._ensure_sample_scene_version(scene_dir):
+                    generated_sample = True
             try:
                 assets = self._discover_assets(scene_dir)
             except ValueError as exc:
@@ -125,6 +130,16 @@ class LocalSceneProvider:
             or normalized.endswith("/sample")
         )
 
+    def is_sample_scene_current(self, raw_path: str) -> bool:
+        if not self._is_sample_scene_path(raw_path):
+            return True
+        scene_dir = self._resolve_path(raw_path)
+        marker_path = scene_dir / ".sample_scene_version"
+        if not marker_path.exists():
+            return False
+        current = marker_path.read_text(encoding="utf-8").strip()
+        return current == self.SAMPLE_SCENE_VERSION
+
     def _bootstrap_sample_scene(self, scene_dir: Path) -> None:
         scene_dir.mkdir(parents=True, exist_ok=True)
         seed = np.random.default_rng(42)
@@ -138,28 +153,51 @@ class LocalSceneProvider:
         estuary = np.exp(-(((x + 0.35) ** 2) + ((y - 0.10) ** 2)) / 0.12).astype(np.float32)
         water_score = np.clip(0.65 * river + 0.75 * estuary, 0.0, 1.0)
         water = water_score > 0.38
+        vegetation = np.clip(0.55 + 0.25 * y + 0.20 * np.sin(2.5 * x), 0.0, 1.0).astype(np.float32)
+
+        # Create bloom/turbidity hotspots so risk output is not nearly uniform.
+        bloom_hotspot = (
+            np.exp(-(((x - 0.10) ** 2) + ((y + 0.18) ** 2)) / 0.020)
+            + 0.8 * np.exp(-(((x + 0.18) ** 2) + ((y - 0.08) ** 2)) / 0.028)
+        ).astype(np.float32)
+        sediment_hotspot = (
+            0.9 * np.exp(-(((x + 0.30) ** 2) + ((y + 0.05) ** 2)) / 0.030)
+            + 0.7 * np.exp(-(((x - 0.25) ** 2) + ((y - 0.28) ** 2)) / 0.035)
+        ).astype(np.float32)
 
         noise = lambda scale: seed.normal(0.0, scale, size=(height, width)).astype(np.float32)
 
         b3 = np.where(
             water,
-            0.20 + 0.12 * water_score + noise(0.004),
-            0.10 + 0.03 * (1.0 - y) + noise(0.004),
+            0.19
+            + 0.05 * water_score
+            - 0.06 * sediment_hotspot
+            - 0.02 * bloom_hotspot
+            + noise(0.010),
+            0.09 + 0.03 * (1.0 - vegetation) + 0.02 * (1.0 - y) + noise(0.006),
         )
         b4 = np.where(
             water,
-            0.08 + 0.06 * water_score + noise(0.004),
-            0.15 + 0.04 * x + noise(0.004),
+            0.05
+            + 0.03 * water_score
+            + 0.16 * sediment_hotspot
+            - 0.01 * bloom_hotspot
+            + noise(0.010),
+            0.12 + 0.05 * (1.0 - vegetation) + 0.02 * x + noise(0.006),
         )
         b5 = np.where(
             water,
-            0.12 + 0.08 * water_score + noise(0.004),
-            0.18 + 0.05 * (0.5 * x - 0.2 * y) + noise(0.004),
+            0.06
+            + 0.03 * water_score
+            + 0.24 * bloom_hotspot
+            + 0.02 * sediment_hotspot
+            + noise(0.010),
+            0.16 + 0.08 * vegetation + 0.03 * (0.5 * x - 0.2 * y) + noise(0.006),
         )
         b8 = np.where(
             water,
-            0.06 + 0.05 * (1.0 - water_score) + noise(0.004),
-            0.30 + 0.10 * (0.5 * x + 0.5) + noise(0.004),
+            0.04 + 0.02 * (1.0 - water_score) + 0.08 * sediment_hotspot + noise(0.008),
+            0.30 + 0.14 * vegetation + 0.04 * (0.5 * x + 0.5) + noise(0.006),
         )
 
         b3 = np.clip(b3, 0.001, 1.0).astype(np.float32)
@@ -194,6 +232,10 @@ class LocalSceneProvider:
             destination = scene_dir / f"{band_name}.tif"
             with rasterio.open(destination, "w", **profile) as dst:
                 dst.write(arr, 1)
+        (scene_dir / ".sample_scene_version").write_text(
+            self.SAMPLE_SCENE_VERSION,
+            encoding="utf-8",
+        )
 
     def _ensure_sample_optional_bands(
         self,
@@ -246,4 +288,12 @@ class LocalSceneProvider:
                 dst.write(band_data[band], 1)
 
         return self._discover_assets(scene_dir), True
+
+    def _ensure_sample_scene_version(self, scene_dir: Path) -> bool:
+        marker_path = scene_dir / ".sample_scene_version"
+        current = marker_path.read_text(encoding="utf-8").strip() if marker_path.exists() else ""
+        if current == self.SAMPLE_SCENE_VERSION:
+            return False
+        self._bootstrap_sample_scene(scene_dir)
+        return True
 

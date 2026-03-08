@@ -457,7 +457,7 @@ class ModelInferenceService:
         water_detector_tag = "".join(
             ch for ch in str(self.settings.water_detector_mode).lower() if ch.isalnum()
         ) or "auto"
-        resolution = f"native-g{grid_block_size}-m{model_hash}-wf3-{water_detector_tag}"
+        resolution = f"native-g{grid_block_size}-m{model_hash}-wf4-{water_detector_tag}"
         if bbox is None:
             stable_assets = json.dumps(
                 {k: assets[k] for k in sorted(assets.keys())},
@@ -593,7 +593,7 @@ class ModelInferenceService:
 
         # Weak labels can produce low-contrast model outputs; if spread is too small,
         # prefer rule-based risk so frontend does not flatten into one color band.
-        if model_std < 0.02:
+        if model_std < 0.05:
             fused[valid] = rule_risk_norm[valid]
             mode = "rule_fallback_low_model_variance"
         else:

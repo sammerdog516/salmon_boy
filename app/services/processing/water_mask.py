@@ -12,14 +12,18 @@ def compute_water_mask_refined(
     b3: np.ndarray,
     b4: np.ndarray,
     b8: np.ndarray,
+    b11: np.ndarray | None = None,
+    b12: np.ndarray | None = None,
     threshold: float = 0.0,
     nir_to_green_ratio_max: float = 1.15,
     ndvi_max: float = 0.15,
 ) -> np.ndarray:
     """Water detection for MVP inference.
 
-    Uses NDWI as the primary detector, then applies a simple spectral gate
-    (NIR-to-green ratio + NDVI cap) to reduce land false-positives.
+    Uses NDWI as the primary detector, then applies spectral gates
+    (NIR-to-green ratio + NDVI cap). If SWIR bands are available, a
+    conservative MNDWI/AWEI-like refinement is applied to reduce urban
+    and bare-land false positives.
     """
     adaptive_threshold = threshold
     finite_ndwi = ndwi[np.isfinite(ndwi)]
@@ -36,7 +40,49 @@ def compute_water_mask_refined(
         )
     spectral_gate = np.isfinite(ratio) & (ratio <= nir_to_green_ratio_max)
     ndvi_gate = np.isfinite(ndvi) & (ndvi <= ndvi_max)
-    return base & spectral_gate & ndvi_gate
+    mask = base & spectral_gate & ndvi_gate
+
+    if b11 is not None:
+        with np.errstate(divide="ignore", invalid="ignore"):
+            mndwi = np.where(
+                np.isfinite(b3) & np.isfinite(b11) & ((b3 + b11) != 0),
+                (b3 - b11) / (b3 + b11),
+                -np.inf,
+            )
+        swir_gate = np.isfinite(mndwi) & (mndwi > -0.05)
+        mask = mask & swir_gate
+
+    if b11 is not None and b12 is not None:
+        with np.errstate(divide="ignore", invalid="ignore"):
+            # AWEI-like water enhancement for shadow/urban suppression.
+            awei = 4.0 * (b3 - b11) - (0.25 * b8 + 2.75 * b12)
+        awei_gate = np.isfinite(awei) & (awei > -0.02)
+        mask = mask & awei_gate
+
+    return _majority_filter(mask.astype(bool), kernel_size=3, min_neighbors=5)
+
+
+def _majority_filter(mask: np.ndarray, kernel_size: int = 3, min_neighbors: int = 5) -> np.ndarray:
+    if kernel_size != 3:
+        raise ValueError("Only 3x3 kernel is supported in MVP majority filter.")
+    if mask.size == 0:
+        return mask
+    if mask.shape[0] < 3 or mask.shape[1] < 3:
+        return mask
+
+    padded = np.pad(mask.astype(np.uint8), pad_width=1, mode="constant", constant_values=0)
+    neighbors = (
+        padded[:-2, :-2]
+        + padded[:-2, 1:-1]
+        + padded[:-2, 2:]
+        + padded[1:-1, :-2]
+        + padded[1:-1, 1:-1]
+        + padded[1:-1, 2:]
+        + padded[2:, :-2]
+        + padded[2:, 1:-1]
+        + padded[2:, 2:]
+    )
+    return mask & (neighbors >= min_neighbors)
 
 
 def _otsu_threshold(values: np.ndarray, bins: int = 128) -> float:

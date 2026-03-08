@@ -117,6 +117,8 @@ class IngestionService:
             and request.local is not None
             and self._is_sample_scene_path(request.local.scene_dir or "")
         ):
+            if not self.local_provider.is_sample_scene_current(request.local.scene_dir or ""):
+                return False
             for optional_band in ("B2", "B11", "B12"):
                 raw_path = assets.get(optional_band)
                 if not isinstance(raw_path, str) or not Path(raw_path).exists():

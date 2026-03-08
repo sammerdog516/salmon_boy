@@ -40,8 +40,9 @@ class Settings(BaseSettings):
     ndwi_water_threshold: float = 0.0
     water_nir_to_green_ratio_max: float = 1.15
     water_ndvi_max: float = 0.15
-    min_tile_water_fraction_for_risk: float = 0.10
-    water_detector_mode: str = "auto"  # spectral | pretrained | auto
+    min_tile_water_fraction_for_risk: float = 0.20
+    # Keep default fully local for hackathon reliability.
+    water_detector_mode: str = "spectral"  # spectral | pretrained | auto
     pretrained_water_model_repo_id: str = "geoai4cities/sentinel2-water-segmentation"
     huggingface_token: str | None = None
     heatmap_yellow_threshold: float = 0.30

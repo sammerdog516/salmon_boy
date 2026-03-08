@@ -642,7 +642,9 @@
                 heatLayer = null;
             }
 
-            if (map.getZoom() < 9) {
+            // Keep heat glow only for enhanced/model mode at close zoom to avoid
+            // broad color distortion when zooming out.
+            if (!state.useModelSource || map.getZoom() < 11) {
                 return;
             }
 

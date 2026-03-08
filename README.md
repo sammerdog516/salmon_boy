@@ -23,8 +23,8 @@ This repository is optimized for an end-to-end local demo:
   - turbidity proxy: `B4 / B3`
   - NDWI water mask: `(B3 - B8) / (B3 + B8)`
 - Water detection modes:
-  - `spectral`: NDWI + NIR/green + NDVI gates
-  - `auto` (default): tries pretrained water model if available, otherwise spectral fallback
+  - `spectral` (default): NDWI + NIR/green + NDVI gates (+ SWIR refinement when `B11/B12` are present)
+  - `auto`: deterministic local spectral mode (no remote model call)
   - `pretrained`: explicit pretrained attempt, with spectral fallback metadata if unavailable
 - Water-only risk scoring:
   - `risk_raw = 0.5*chlorophyll + 0.3*turbidity + 0.2*temperature_proxy`

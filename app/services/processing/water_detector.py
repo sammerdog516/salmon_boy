@@ -33,27 +33,37 @@ def detect_water_mask(
     hf_token: str | None = None,
 ) -> WaterDetectionResult:
     mode_normalized = (mode or "auto").strip().lower()
+    b11 = bundle.arrays.get("B11")
+    b12 = bundle.arrays.get("B12")
     spectral_mask = compute_water_mask_refined(
         ndwi=ndwi,
         b3=b3,
         b4=b4,
         b8=b8,
+        b11=b11,
+        b12=b12,
         threshold=threshold,
         nir_to_green_ratio_max=nir_to_green_ratio_max,
         ndvi_max=ndvi_max,
     )
-    if mode_normalized == "spectral":
+    spectral_method = "spectral_refined_swir" if b11 is not None else "spectral_refined"
+    spectral_details = {
+        "has_b11": bool(b11 is not None),
+        "has_b12": bool(b12 is not None),
+    }
+
+    if mode_normalized in {"spectral", "auto"}:
         return WaterDetectionResult(
             mask=spectral_mask,
-            method="spectral_refined",
-            details={},
+            method=spectral_method if mode_normalized == "spectral" else f"{spectral_method}_auto",
+            details=spectral_details,
         )
 
-    if mode_normalized not in {"auto", "pretrained"}:
+    if mode_normalized != "pretrained":
         return WaterDetectionResult(
             mask=spectral_mask,
-            method="spectral_refined_invalid_mode_fallback",
-            details={"requested_mode": mode},
+            method=f"{spectral_method}_invalid_mode_fallback",
+            details={"requested_mode": mode, **spectral_details},
         )
 
     required = ("B2", "B3", "B4", "B8", "B11", "B12")
@@ -61,8 +71,8 @@ def detect_water_mask(
     if missing:
         return WaterDetectionResult(
             mask=spectral_mask,
-            method="spectral_refined_missing_pretrained_bands",
-            details={"missing_bands": missing},
+            method=f"{spectral_method}_missing_pretrained_bands",
+            details={"missing_bands": missing, **spectral_details},
         )
 
     pretrained, pretrained_error = _detect_water_with_geoai(
@@ -73,23 +83,15 @@ def detect_water_mask(
     if pretrained is not None:
         return pretrained
 
-    if mode_normalized == "pretrained":
-        # Explicit pretrained mode but backend dependency unavailable.
-        return WaterDetectionResult(
-            mask=spectral_mask,
-            method="spectral_refined_pretrained_unavailable",
-            details={
-                "hint": (
-                    "Install geoai-py and dependencies, then set "
-                    "WATER_DETECTOR_MODE=pretrained."
-                ),
-                "error": pretrained_error,
-            },
-        )
+    # Explicit pretrained mode but dependency/repo/token/runtime unavailable.
     return WaterDetectionResult(
         mask=spectral_mask,
-        method="spectral_refined_pretrained_fallback",
-        details={"error": pretrained_error},
+        method=spectral_method,
+        details={
+            "pretrained_fallback": True,
+            "error": pretrained_error,
+            **spectral_details,
+        },
     )
 
 
