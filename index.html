@@ -112,8 +112,7 @@
             gap: 8px;
         }
 
-        button,
-        input {
+        button {
             border-radius: var(--radius-main);
             border: 1px solid var(--border-color);
             color: var(--text-main);
@@ -129,12 +128,6 @@
 
         button:hover {
             background: #3a3a3a;
-        }
-
-        .row {
-            display: grid;
-            grid-template-columns: 1fr auto;
-            gap: 8px;
         }
 
         details {
@@ -161,9 +154,39 @@
         .factor-row {
             display: flex;
             justify-content: space-between;
-            margin-top: 6px;
-            padding-top: 6px;
+            margin-top: 8px;
+            padding-top: 8px;
             border-top: 1px dashed #3d3d3d;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .factor-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .mini-btn {
+            padding: 3px 7px;
+            font-size: 0.72rem;
+            border-radius: 999px;
+            background: #353535;
+            border: 1px solid #555;
+        }
+
+        .mini-btn:hover {
+            background: #474747;
+        }
+
+        .factor-info-panel {
+            margin-top: 10px;
+            padding: 8px;
+            border: 1px solid #3f3f3f;
+            border-radius: 6px;
+            background: #1f1f1f;
+            color: #c8c8c8;
+            line-height: 1.45;
         }
 
         @keyframes swim {
@@ -191,8 +214,8 @@
                 <span class="metric-label">Water Coverage</span>
             </div>
             <div class="metric-card">
-                <span class="metric-value" id="grid-cells">--</span>
-                <span class="metric-label">Risk Cells</span>
+                <span class="metric-value" id="floating-plastic">--</span>
+                <span class="metric-label">Floating Plastic</span>
             </div>
             <div class="metric-card">
                 <span class="metric-value" id="salmon-path-count">--</span>
@@ -201,33 +224,49 @@
         </div>
 
         <div class="controls">
-            <div class="row">
-                <input id="scene-id-input" placeholder="Scene ID (for model mode)">
-                <button onclick="applySceneId()">Apply</button>
-            </div>
             <button onclick="refreshLive()">Refresh Live Data</button>
-            <button onclick="toggleRisk()" id="source-toggle">Switch to Rule Source</button>
+            <button onclick="toggleRisk()" id="source-toggle">Show Enhanced Risk View</button>
             <button onclick="toggleSalmon()">Show/Hide Salmon Paths</button>
         </div>
 
         <details>
-            <summary>Live Factors</summary>
+            <summary>Toggle Risk Level & Factors</summary>
             <div class="details-content">
-                <div class="factor-row"><span>Chlorophyll proxy</span><strong id="chloro-val">--</strong></div>
-                <div class="factor-row"><span>Turbidity proxy</span><strong id="turbid-val">--</strong></div>
-                <div class="factor-row"><span>High-risk cells</span><strong id="high-risk-val">--</strong></div>
+                <div class="factor-row">
+                    <div class="factor-label">
+                        <span>Chlorophyll Proxy</span>
+                        <button class="mini-btn" onclick="showFactorInfo('chlorophyll')" type="button">Info</button>
+                    </div>
+                    <strong id="chloro-val">--</strong>
+                </div>
+                <div class="factor-row">
+                    <div class="factor-label">
+                        <span>Turbidity Proxy</span>
+                        <button class="mini-btn" onclick="showFactorInfo('turbidity')" type="button">Info</button>
+                    </div>
+                    <strong id="turbid-val">--</strong>
+                </div>
+                <div class="factor-row">
+                    <div class="factor-label">
+                        <span>Floating Plastic</span>
+                        <button class="mini-btn" onclick="showFactorInfo('plastic')" type="button">Info</button>
+                    </div>
+                    <strong id="plastic-val">--</strong>
+                </div>
+                <div id="factor-info-panel" class="factor-info-panel">
+                    Tap a factor's Info button to see what it means.
+                </div>
             </div>
         </details>
 
         <details>
-            <summary>Usage</summary>
+            <summary>Help & Documentation</summary>
             <div class="details-content">
-                <div>This frontend calls backend APIs and renders:</div>
-                <div>1. Risk grid polygons from <code>/risk/tiles</code></div>
-                <div>2. Heatmap intensities from risk scores</div>
-                <div>3. Migration paths from <code>/migration-paths/geojson</code></div>
-                <div style="margin-top: 8px;">Query params:</div>
-                <div><code>?api=http://127.0.0.1:8000&scene_id=scene-...&source=model</code></div>
+                <div>This map highlights water risk around salmon migration routes.</div>
+                <div>Blue areas are lower risk. Yellow to red areas show growing concern.</div>
+                <div>Use "Refresh Live Data" to pull the latest map.</div>
+                <div>Use "Show/Hide Salmon Paths" to focus on habitat corridors.</div>
+                <div>The "Info" buttons explain each live factor in plain language.</div>
             </div>
         </details>
     </div>
@@ -240,7 +279,7 @@
         const params = new URLSearchParams(window.location.search);
         const API_BASE = params.get("api") || "http://127.0.0.1:8000";
         const DEFAULT_SCENE_ID = params.get("scene_id") || "scene-6fe3d592c6f1";
-        const DEFAULT_SOURCE = (params.get("source") || "model").toLowerCase();
+        const DEFAULT_SOURCE = (params.get("source") || "rule").toLowerCase();
         const MODEL_CHECKPOINT = params.get("checkpoint");
 
         const DEFAULT_THRESHOLDS = {
@@ -258,7 +297,23 @@
             thresholds: { ...DEFAULT_THRESHOLDS },
             salmonVisible: true,
             migrationPathCount: 0,
-            hasFitBounds: false
+            hasFitBounds: false,
+            factorMetrics: {
+                chlorophyllPct: 0,
+                turbidityPct: 0,
+                floatingPlasticPct: 0,
+                waterCoveragePct: 0,
+                avgRiskPct: 0
+            }
+        };
+
+        const FACTOR_HELP = {
+            chlorophyll:
+                "Chlorophyll Proxy: estimates algae growth intensity in water. Higher values suggest stronger bloom activity that can reduce oxygen for fish.",
+            turbidity:
+                "Turbidity Proxy: estimates water cloudiness from sediment and suspended matter. Higher turbidity can make migration and feeding harder for salmon.",
+            plastic:
+                "Floating Plastic: a practical risk proxy based on cloudy water, water coverage, and current risk score. Higher values suggest more debris retention risk."
         };
 
         const map = L.map("map").setView([49.2, -123.1], 8);
@@ -292,6 +347,44 @@
                 });
             }
             return response.json();
+        }
+
+        function clamp(value, min, max) {
+            return Math.min(max, Math.max(min, value));
+        }
+
+        function normalizeChlorophyll(value) {
+            if (!Number.isFinite(value)) return 0;
+            return clamp((value + 1) / 2, 0, 1);
+        }
+
+        function normalizeTurbidity(value) {
+            if (!Number.isFinite(value)) return 0;
+            return clamp(value / 1.5, 0, 1);
+        }
+
+        function estimateFloatingPlastic(turbidityNorm, waterCoverageNorm, avgRiskNorm) {
+            return clamp(
+                0.55 * turbidityNorm + 0.25 * waterCoverageNorm + 0.20 * avgRiskNorm,
+                0,
+                1
+            );
+        }
+
+        function showFactorInfo(factorKey) {
+            const panel = document.getElementById("factor-info-panel");
+            const metrics = state.factorMetrics;
+            if (!panel) return;
+
+            if (factorKey === "chlorophyll") {
+                panel.textContent = `${FACTOR_HELP.chlorophyll} Current level: ${metrics.chlorophyllPct.toFixed(1)}%.`;
+                return;
+            }
+            if (factorKey === "turbidity") {
+                panel.textContent = `${FACTOR_HELP.turbidity} Current level: ${metrics.turbidityPct.toFixed(1)}%.`;
+                return;
+            }
+            panel.textContent = `${FACTOR_HELP.plastic} Current level: ${metrics.floatingPlasticPct.toFixed(1)}%.`;
         }
 
         function centroidFromPolygon(feature) {
@@ -453,17 +546,33 @@
 
             const avgRisk = mean(scores);
             const maxRisk = scores.length ? Math.max(...scores) : 0;
-            const highRiskCount = scores.filter(
-                (score) => score >= (state.thresholds.red ?? 0.65)
-            ).length;
+            const waterCoverage = mean(waterFractions);
+            const chlorophyllMean = mean(chlorophyll);
+            const turbidityMean = mean(turbidity);
+
+            const chlorophyllNorm = normalizeChlorophyll(chlorophyllMean);
+            const turbidityNorm = normalizeTurbidity(turbidityMean);
+            const floatingPlasticNorm = estimateFloatingPlastic(
+                turbidityNorm,
+                clamp(waterCoverage, 0, 1),
+                clamp(avgRisk, 0, 1)
+            );
+
+            state.factorMetrics = {
+                chlorophyllPct: chlorophyllNorm * 100,
+                turbidityPct: turbidityNorm * 100,
+                floatingPlasticPct: floatingPlasticNorm * 100,
+                waterCoveragePct: clamp(waterCoverage, 0, 1) * 100,
+                avgRiskPct: clamp(avgRisk, 0, 1) * 100
+            };
 
             document.getElementById("bloom-density").textContent = `${(avgRisk * 100).toFixed(1)}%`;
-            document.getElementById("water-coverage").textContent = `${(mean(waterFractions) * 100).toFixed(1)}%`;
-            document.getElementById("grid-cells").textContent = `${features.length}`;
+            document.getElementById("water-coverage").textContent = `${(waterCoverage * 100).toFixed(1)}%`;
+            document.getElementById("floating-plastic").textContent = `${(floatingPlasticNorm * 100).toFixed(1)}%`;
             document.getElementById("salmon-path-count").textContent = `${state.migrationPathCount}`;
-            document.getElementById("chloro-val").textContent = `${(Math.max(0, mean(chlorophyll)) * 100).toFixed(1)}%`;
-            document.getElementById("turbid-val").textContent = `${(Math.max(0, mean(turbidity)) * 100).toFixed(1)}%`;
-            document.getElementById("high-risk-val").textContent = `${highRiskCount} / ${scores.length}`;
+            document.getElementById("chloro-val").textContent = `${(chlorophyllNorm * 100).toFixed(1)}%`;
+            document.getElementById("turbid-val").textContent = `${(turbidityNorm * 100).toFixed(1)}%`;
+            document.getElementById("plastic-val").textContent = `${(floatingPlasticNorm * 100).toFixed(1)}%`;
             updateRiskIndicator(maxRisk);
         }
 
@@ -531,7 +640,7 @@
 
         async function fetchModelTiles() {
             if (!state.sceneId) {
-                throw new Error("Model mode requires a scene_id.");
+                throw new Error("Enhanced risk view is unavailable for this dataset right now.");
             }
             const predictPayload = {
                 scene_id: state.sceneId,
@@ -559,17 +668,17 @@
 
         async function loadAndRenderRiskData() {
             setConnectionStatus(
-                `Loading ${state.useModelSource ? "model" : "rule"} data from ${API_BASE}...`,
+                "Loading live water-risk map...",
                 "info"
             );
 
             const sourceButton = document.getElementById("source-toggle");
             sourceButton.textContent = state.useModelSource
-                ? "Switch to Rule Source"
-                : "Switch to Model Source";
+                ? "Show Standard Risk View"
+                : "Show Enhanced Risk View";
 
             let payload = null;
-            let sourceUsed = state.useModelSource ? "model" : "rule";
+            let sourceUsed = state.useModelSource ? "Enhanced View" : "Standard View";
 
             try {
                 payload = state.useModelSource
@@ -580,7 +689,7 @@
                     payload = state.useModelSource
                         ? await fetchRuleTiles()
                         : await fetchModelTiles();
-                    sourceUsed = state.useModelSource ? "rule (fallback)" : "model (fallback)";
+                    sourceUsed = state.useModelSource ? "Standard View (fallback)" : "Enhanced View (fallback)";
                 } catch (secondaryError) {
                     throw new Error(
                         `Primary source failed: ${primaryError.message} | Fallback failed: ${secondaryError.message}`
@@ -611,7 +720,7 @@
             }
 
             setConnectionStatus(
-                `Live data loaded (${sourceUsed}). scene=${payload.scene_id || "unknown"}`,
+                `Live data loaded: ${sourceUsed}`,
                 "info"
             );
         }
@@ -635,16 +744,6 @@
             }
         }
 
-        function applySceneId() {
-            const input = document.getElementById("scene-id-input");
-            const value = input.value.trim();
-            state.sceneId = value || null;
-            state.lastProcessedSceneId = null;
-            state.lastPredictionId = null;
-            state.hasFitBounds = false;
-            refreshLive();
-        }
-
         async function refreshLive() {
             try {
                 await loadAndRenderRiskData();
@@ -653,11 +752,9 @@
             }
         }
 
-        document.getElementById("scene-id-input").value = state.sceneId || "";
-
         window.toggleSalmon = toggleSalmon;
         window.toggleRisk = toggleRisk;
-        window.applySceneId = applySceneId;
+        window.showFactorInfo = showFactorInfo;
         window.refreshLive = refreshLive;
 
         (async () => {
