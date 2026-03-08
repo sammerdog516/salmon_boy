@@ -146,6 +146,37 @@ class CacheManager:
             "artifact_paths": artifacts,
         }
 
+    def load_prediction_cache(
+        self,
+        cache_key: str,
+        include_grid: bool,
+    ) -> dict[str, Any] | None:
+        npz_path = self.derived_dir / f"{cache_key}.pred.npz"
+        summary_path = self.derived_dir / f"{cache_key}.pred.summary.json"
+        grid_path = self.tiles_dir / f"{cache_key}.pred.geojson"
+        if not npz_path.exists() or not summary_path.exists():
+            return None
+        if include_grid and not grid_path.exists():
+            return None
+
+        summary_payload = json.loads(summary_path.read_text(encoding="utf-8"))
+        grid_payload = None
+        if include_grid and grid_path.exists():
+            grid_payload = json.loads(grid_path.read_text(encoding="utf-8"))
+
+        artifacts = {
+            "prediction_npz": str(npz_path),
+            "summary_json": str(summary_path),
+        }
+        if grid_path.exists():
+            artifacts["grid_geojson"] = str(grid_path)
+        return {
+            "summary": summary_payload.get("summary", {}),
+            "grid": grid_payload,
+            "artifact_paths": artifacts,
+            "model_id": summary_payload.get("model_id"),
+        }
+
     def save_derived_cache(
         self,
         cache_key: str,
@@ -183,6 +214,49 @@ class CacheManager:
         self.enforce_cache_size()
         artifacts = {
             "derived_npz": str(npz_path),
+            "summary_json": str(summary_path),
+        }
+        if grid is not None:
+            artifacts["grid_geojson"] = str(grid_path)
+        return artifacts
+
+    def save_prediction_cache(
+        self,
+        cache_key: str,
+        scene_id: str,
+        model_id: str,
+        risk_probability: np.ndarray,
+        risk_normalized: np.ndarray,
+        water_mask: np.ndarray,
+        summary: dict[str, Any],
+        thresholds: dict[str, float],
+        grid: dict[str, Any] | None,
+    ) -> dict[str, str]:
+        npz_path = self.derived_dir / f"{cache_key}.pred.npz"
+        summary_path = self.derived_dir / f"{cache_key}.pred.summary.json"
+        grid_path = self.tiles_dir / f"{cache_key}.pred.geojson"
+
+        np.savez_compressed(
+            npz_path,
+            risk_probability=risk_probability.astype(np.float32),
+            risk_normalized=risk_normalized.astype(np.float32),
+            water_mask=water_mask.astype(np.uint8),
+        )
+        summary_payload = {
+            "cache_key": cache_key,
+            "scene_id": scene_id,
+            "model_id": model_id,
+            "summary": summary,
+            "thresholds": thresholds,
+            "updated_at": datetime.now(UTC).isoformat(),
+        }
+        summary_path.write_text(json.dumps(summary_payload, indent=2), encoding="utf-8")
+        if grid is not None:
+            grid_path.write_text(json.dumps(grid, indent=2), encoding="utf-8")
+
+        self.enforce_cache_size()
+        artifacts = {
+            "prediction_npz": str(npz_path),
             "summary_json": str(summary_path),
         }
         if grid is not None:

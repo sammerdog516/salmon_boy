@@ -34,6 +34,8 @@ class Settings(BaseSettings):
     scene_registry_path: Path = Path("artifacts/registry/scenes.json")
     processed_registry_path: Path = Path("artifacts/registry/processed_scenes.json")
     training_registry_path: Path = Path("artifacts/registry/training_jobs.json")
+    prediction_registry_path: Path = Path("artifacts/registry/predictions.json")
+    model_artifacts_dir: Path = Path("artifacts/models")
 
     ndwi_water_threshold: float = 0.0
     heatmap_yellow_threshold: float = 0.30
@@ -41,6 +43,8 @@ class Settings(BaseSettings):
     heatmap_infrared_threshold: float = 0.85
     default_grid_block_size: int = 32
     default_migration_buffer_meters: float = 250.0
+    default_inference_tile_size: int = 256
+    default_inference_batch_size: int = 8
     cache_max_size_gb: float = 10.0
     clipped_cache_max_dimension: int = 2048
     cache_default_dataset: str = "sentinel2"
@@ -70,9 +74,11 @@ class Settings(BaseSettings):
             cache_root / "clipped",
             cache_root / "derived",
             cache_root / "tiles",
+            self.resolve_path(self.model_artifacts_dir),
             self.resolve_path(self.scene_registry_path).parent,
             self.resolve_path(self.processed_registry_path).parent,
             self.resolve_path(self.training_registry_path).parent,
+            self.resolve_path(self.prediction_registry_path).parent,
             self.resolve_path(self.migration_paths_file).parent,
         }
         for directory in directories:

@@ -77,6 +77,7 @@ app/
       summarizer.py
     training/
       dataset.py
+      inference.py
       prithvi.py
       weak_labels.py
     storage/
@@ -89,6 +90,7 @@ scripts/
   build_dataset.py
   tile_dataset.py
   train.py
+  infer.py
 data/
   raw/
   processed/
@@ -126,6 +128,10 @@ Format:
 Example:
 
 `sentinel2_2026-03-07_a13f92_native-g32`
+
+Model prediction caches append model identity into the resolution fragment, e.g.:
+
+`sentinel2_2026-03-07_a13f92_native-g32-m1a2b3c4`
 
 ### Eviction Policy
 
@@ -208,6 +214,7 @@ python -m pip install torch
 - `POST /ingest/sentinel`
 - `POST /process/scene`
 - `POST /risk/score`
+- `POST /risk/predict`
 - `GET /risk/tiles`
 - `POST /train/prithvi`
 - `GET /train/status`
@@ -252,6 +259,24 @@ curl -X POST http://localhost:8000/process/scene \
 curl "http://localhost:8000/risk/tiles?processed_scene_id=proc-abc123"
 ```
 
+### 3b) Predict with trained model and then fetch model tiles
+
+```bash
+curl -X POST http://localhost:8000/risk/predict \
+  -H "Content-Type: application/json" \
+  -d '{
+    "scene_id": "scene-abc123",
+    "model_checkpoint": "artifacts/models/weakrisk_baseline/best.pt",
+    "grid_block_size": 32
+  }'
+```
+
+Then request tiles using model source (same frontend shape):
+
+```bash
+curl "http://localhost:8000/risk/tiles?source=model&prediction_id=pred-abc123"
+```
+
 ### 4) Build weak-label dataset sample
 
 ```bash
@@ -276,6 +301,14 @@ python scripts/train.py \
   --manifest data/processed/tiles_manifest.jsonl \
   --epochs 10 \
   --batch-size 8
+```
+
+### 7) CLI inference with cache-aware model prediction
+
+```bash
+python scripts/infer.py \
+  --scene-id scene-abc123 \
+  --model-checkpoint artifacts/models/weakrisk_baseline/best.pt
 ```
 
 ## Environment Variables

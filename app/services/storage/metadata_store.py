@@ -11,10 +11,12 @@ class MetadataStore:
         scene_registry_path: Path,
         processed_registry_path: Path,
         training_registry_path: Path,
+        prediction_registry_path: Path,
     ) -> None:
         self.scene_registry_path = scene_registry_path
         self.processed_registry_path = processed_registry_path
         self.training_registry_path = training_registry_path
+        self.prediction_registry_path = prediction_registry_path
         self._ensure_files()
 
     def _ensure_files(self) -> None:
@@ -22,6 +24,7 @@ class MetadataStore:
             self.scene_registry_path,
             self.processed_registry_path,
             self.training_registry_path,
+            self.prediction_registry_path,
         ):
             path.parent.mkdir(parents=True, exist_ok=True)
             if not path.exists():
@@ -86,3 +89,11 @@ class MetadataStore:
     def list_training_jobs(self) -> list[dict[str, Any]]:
         return self._list_records(self.training_registry_path)
 
+    def save_prediction(self, prediction_id: str, payload: dict[str, Any]) -> None:
+        self._save_record(self.prediction_registry_path, prediction_id, payload)
+
+    def get_prediction(self, prediction_id: str) -> dict[str, Any] | None:
+        return self._get_record(self.prediction_registry_path, prediction_id)
+
+    def list_predictions(self) -> list[dict[str, Any]]:
+        return self._list_records(self.prediction_registry_path)

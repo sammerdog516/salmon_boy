@@ -10,6 +10,7 @@ from app.services.migration.loader import MigrationPathService
 from app.services.processing.service import ProcessingService
 from app.services.storage.cache_manager import CacheManager
 from app.services.storage.metadata_store import MetadataStore
+from app.services.training.inference import ModelInferenceService
 from app.services.training.prithvi import PrithviTrainingService
 
 
@@ -21,6 +22,7 @@ class AppServices:
     migration_service: MigrationPathService
     ingestion_service: IngestionService
     processing_service: ProcessingService
+    inference_service: ModelInferenceService
     training_service: PrithviTrainingService
 
 
@@ -30,6 +32,7 @@ def build_services(settings: Settings) -> AppServices:
         scene_registry_path=settings.resolve_path(settings.scene_registry_path),
         processed_registry_path=settings.resolve_path(settings.processed_registry_path),
         training_registry_path=settings.resolve_path(settings.training_registry_path),
+        prediction_registry_path=settings.resolve_path(settings.prediction_registry_path),
     )
     migration_service = MigrationPathService(
         migration_geojson_path=settings.resolve_path(settings.migration_paths_file)
@@ -48,6 +51,12 @@ def build_services(settings: Settings) -> AppServices:
         metadata_store=metadata_store,
         migration_service=migration_service,
     )
+    inference_service = ModelInferenceService(
+        settings=settings,
+        cache_manager=cache_manager,
+        metadata_store=metadata_store,
+        migration_service=migration_service,
+    )
     training_service = PrithviTrainingService(
         settings=settings,
         metadata_store=metadata_store,
@@ -59,5 +68,6 @@ def build_services(settings: Settings) -> AppServices:
         migration_service=migration_service,
         ingestion_service=ingestion_service,
         processing_service=processing_service,
+        inference_service=inference_service,
         training_service=training_service,
     )

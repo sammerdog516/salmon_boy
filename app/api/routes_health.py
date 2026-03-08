@@ -23,9 +23,11 @@ def health(services: AppServices = Depends(get_services)) -> HealthResponse:
         "cache_clipped_dir": (cache_root / "clipped").exists(),
         "cache_derived_dir": (cache_root / "derived").exists(),
         "cache_tiles_dir": (cache_root / "tiles").exists(),
+        "model_artifacts_dir": settings.resolve_path(settings.model_artifacts_dir).exists(),
         "migration_paths_file": migration_path.exists(),
         "scene_registry": settings.resolve_path(settings.scene_registry_path).exists(),
         "processed_registry": settings.resolve_path(settings.processed_registry_path).exists(),
+        "prediction_registry": settings.resolve_path(settings.prediction_registry_path).exists(),
     }
     status = "ok" if all(readiness.values()) else "degraded"
     return HealthResponse(

@@ -115,10 +115,41 @@ class RiskScoreResponse(BaseModel):
 
 class RiskTilesResponse(BaseModel):
     scene_id: str
-    processed_scene_id: str
+    processed_scene_id: str | None = None
+    prediction_id: str | None = None
+    model_id: str | None = None
+    source: str = "rule"
     thresholds: dict[str, float]
     features: dict[str, Any]
     path_summary: dict[str, Any] | None = None
+
+
+class RiskPredictRequest(BaseModel):
+    scene_id: str
+    model_checkpoint: str | None = None
+    model_id: str | None = None
+    aoi_bbox: list[float] | None = Field(default=None, description="[minx, miny, maxx, maxy]")
+    aoi_crs: str = "EPSG:4326"
+    include_grid: bool = True
+    grid_block_size: int | None = Field(default=None, ge=4, le=512)
+    migration_path_id: str | None = None
+    migration_buffer_meters: float | None = Field(default=None, ge=0.0)
+    inference_tile_size: int | None = Field(default=None, ge=64, le=2048)
+    inference_batch_size: int | None = Field(default=None, ge=1, le=256)
+    device: str | None = Field(default=None, description="auto/cpu/cuda")
+    force_recompute: bool = False
+
+
+class RiskPredictResponse(BaseModel):
+    prediction_id: str
+    scene_id: str
+    model_id: str
+    cache_key: str
+    summary: dict[str, Any]
+    artifact_paths: dict[str, str]
+    grid: dict[str, Any] | None = None
+    path_summary: dict[str, Any] | None = None
+    cache_hit: bool
 
 
 class MigrationPathItem(BaseModel):
@@ -150,4 +181,3 @@ class PrithviTrainResponse(BaseModel):
 class TrainStatusResponse(BaseModel):
     jobs: list[dict[str, Any]]
     count: int
-

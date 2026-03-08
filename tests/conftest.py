@@ -40,6 +40,7 @@ def test_settings(tmp_path: Path) -> Settings:
         scene_registry_path=tmp_path / "artifacts" / "registry" / "scenes.json",
         processed_registry_path=tmp_path / "artifacts" / "registry" / "processed_scenes.json",
         training_registry_path=tmp_path / "artifacts" / "registry" / "training_jobs.json",
+        prediction_registry_path=tmp_path / "artifacts" / "registry" / "predictions.json",
         migration_paths_file=migration_path,
         default_grid_block_size=4,
     )
@@ -52,4 +53,3 @@ def client(test_settings: Settings) -> TestClient:
     app = create_app(test_settings)
     with TestClient(app) as test_client:
         yield test_client
-
