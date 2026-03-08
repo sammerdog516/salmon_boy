@@ -1,0 +1,884 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Salmon Boy: Atlantic Salmon Risk Monitor</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <style>
+        :root {
+            interpolate-size: allow-keywords;
+            --bg-dark: #121212;
+            --panel-bg: rgba(20, 20, 20, 0.92);
+            --text-main: #ffffff;
+            --text-muted: #b3b3b3;
+            --risk-low: #00d4ff;
+            --risk-mid: #f1c232;
+            --risk-high: #ff4d4d;
+            --border-color: #444;
+            --radius-main: 8px;
+        }
+
+        body { background-color: var(--bg-dark); color: var(--text-main); margin: 0; overflow: hidden; font-family: sans-serif; }
+        #map { height: 100vh; width: 100vw; z-index: 1; }
+
+        .dashboard-overlay {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 320px;
+            max-height: calc(100vh - 40px);
+            overflow-y: auto;
+            scrollbar-width: thin;
+            scrollbar-color: #444 transparent;
+            background: var(--panel-bg);
+            backdrop-filter: blur(10px);
+            border-radius: var(--radius-main);
+            padding: 16px;
+            z-index: 1000;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+        }
+
+        /* --- LOGO --- */
+        .logo-section {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 10px;
+        }
+        .logo-img {
+            width: 100%;
+            max-width: 220px;
+            border-radius: 6px;
+            display: block;
+        }
+
+        .subtle { color: var(--text-muted); font-size: 0.78rem; }
+        #connection-status {
+            font-size: 0.70rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            text-align: center;
+        }
+
+        .metric-grid { display: grid; grid-template-columns: 1fr; gap: 10px; margin-bottom: 14px; }
+        .metric-card { background: rgba(255, 255, 255, 0.05); padding: 10px; border-radius: var(--radius-main); text-align: center; }
+        .metric-value { font-size: 1.2rem; font-weight: bold; display: block; }
+        .metric-label { font-size: 0.70rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+
+        .risk-status {
+            padding: 10px;
+            border-radius: var(--radius-main);
+            text-align: center;
+            font-weight: bold;
+            margin: 10px 0 14px 0;
+            letter-spacing: 0.8px;
+            border: 1px solid transparent;
+            transition: all 0.4s ease;
+        }
+        .status-low { background: rgba(0, 212, 255, 0.12); color: var(--risk-low); border-color: var(--risk-low); }
+        .status-medium { background: rgba(241, 194, 50, 0.12); color: var(--risk-mid); border-color: var(--risk-mid); }
+        .status-high { background: rgba(255, 77, 77, 0.12); color: var(--risk-high); border-color: var(--risk-high); }
+
+        .controls { display: flex; flex-direction: column; gap: 8px; }
+
+        button {
+            border-radius: var(--radius-main);
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+            background: #2c2c2c;
+            padding: 10px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.2s ease;
+        }
+        button:hover { background: #3a3a3a; border-color: #666; }
+
+        /* --- MAIN DROPDOWN CONTAINERS --- */
+        .dropdown-container {
+            display: flex;
+            flex-direction: column;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-main);
+        }
+        .dropdown-container > summary {
+            padding: 10px 12px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-weight: 600;
+            background: #2a2a2a;
+            border-radius: var(--radius-main);
+            list-style: none;
+            user-select: none;
+            text-align: center;
+            transition: all 0.2s ease;
+        }
+        .dropdown-container > summary:hover { background: #333; }
+        .dropdown-content {
+            padding: 12px;
+            font-size: 0.82rem;
+            color: var(--text-muted);
+            line-height: 1.5;
+            border-top: 1px solid var(--border-color);
+        }
+
+        /* --- SUB-DROPDOWNS (factor indicators) --- */
+        .resource-grid { display: flex; flex-direction: column; gap: 6px; }
+
+        .sub-dropdown summary {
+            background: #222;
+            border: 1px solid #555;
+            border-radius: 6px;
+            padding: 9px 10px;
+            color: var(--text-main);
+            cursor: pointer;
+            list-style: none;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.2s ease;
+        }
+        .sub-dropdown summary:hover { background: #2d2d2d; }
+        .sub-dropdown[open] summary { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+
+        .metric-badge {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 2px 9px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            color: var(--risk-low);
+            transition: color 0.4s ease;
+            min-width: 44px;
+            text-align: center;
+        }
+
+        .sub-dropdown-content {
+            background: #1a1a1a;
+            border: 1px solid #444;
+            border-top: none;
+            border-bottom-left-radius: 6px;
+            border-bottom-right-radius: 6px;
+            padding: 10px;
+            font-size: 0.76rem;
+            color: var(--text-muted);
+            line-height: 1.55;
+        }
+
+        .resource-link {
+            display: inline-block;
+            margin-top: 7px;
+            color: var(--risk-low);
+            text-decoration: none;
+            font-weight: bold;
+            font-size: 0.76rem;
+            transition: color 0.2s ease;
+        }
+        .resource-link:hover { color: #fff; text-decoration: underline; }
+
+        /* --- SMOOTH ACCORDION ANIMATION --- */
+        details::details-content {
+            height: 0;
+            opacity: 0;
+            overflow: hidden;
+            transition: height 0.4s ease, opacity 0.4s ease;
+        }
+        details[open]::details-content {
+            height: auto;
+            opacity: 1;
+        }
+
+        /* --- LEAFLET POPUP DARK THEME --- */
+        .leaflet-popup-content-wrapper {
+            background: rgba(16, 16, 16, 0.97);
+            color: #fff;
+            border: 1px solid #444;
+            border-radius: 8px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.65);
+            padding: 0;
+        }
+        .leaflet-popup-content { margin: 0; padding: 0; min-width: 200px; }
+        .leaflet-popup-tip { background: rgba(16, 16, 16, 0.97); }
+        .leaflet-popup-close-button { color: #888 !important; top: 8px !important; right: 8px !important; font-size: 18px !important; }
+
+        .popup-header {
+            padding: 10px 30px 10px 14px;
+            border-radius: 7px 7px 0 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .popup-header.risk-blue    { background: rgba(0, 212, 255, 0.14); border-bottom: 1px solid rgba(0, 212, 255, 0.25); }
+        .popup-header.risk-yellow  { background: rgba(241, 194, 50, 0.14); border-bottom: 1px solid rgba(241, 194, 50, 0.25); }
+        .popup-header.risk-red     { background: rgba(255, 77, 77, 0.14);  border-bottom: 1px solid rgba(255, 77, 77, 0.25); }
+        .popup-header.risk-infrared{ background: rgba(255, 0, 255, 0.14);  border-bottom: 1px solid rgba(255, 0, 255, 0.25); }
+
+        .popup-category { font-weight: bold; font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.8px; }
+        .popup-header.risk-blue     .popup-category { color: #00d4ff; }
+        .popup-header.risk-yellow   .popup-category { color: #f1c232; }
+        .popup-header.risk-red      .popup-category { color: #ff4d4d; }
+        .popup-header.risk-infrared .popup-category { color: #ff00ff; }
+
+        .popup-score { font-size: 1.25rem; font-weight: bold; }
+        .popup-body { padding: 10px 14px 12px 14px; }
+        .popup-row { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid #1e1e1e; font-size: 0.80rem; }
+        .popup-row:last-child { border-bottom: none; }
+        .popup-label { color: var(--text-muted); }
+        .popup-val { font-weight: 600; }
+
+        /* --- SALMON PATH ANIMATION --- */
+        @keyframes swim { to { stroke-dashoffset: -22px; } }
+        .salmon-path { animation: swim 1.2s linear infinite; }
+    </style>
+</head>
+<body>
+    <div class="dashboard-overlay">
+        <div class="logo-section">
+            <img src="logo.png" alt="Salmon Boy" class="logo-img">
+        </div>
+
+        <div id="connection-status" class="subtle" style="margin-bottom: 6px;">Connecting to backend...</div>
+        <div id="risk-indicator" class="risk-status status-low">LOW RISK</div>
+
+        <div class="metric-grid">
+            <div class="metric-card">
+                <span class="metric-value" id="bloom-density">--</span>
+                <span class="metric-label">Avg Water Risk</span>
+            </div>
+        </div>
+
+        <div class="controls">
+            <button onclick="refreshLive()">↺ Refresh Live Data</button>
+            <button onclick="toggleSalmon()">🐟 Show/Hide Salmon Paths</button>
+
+            <details class="dropdown-container" name="dashboard-menus">
+                <summary>⚠️ Risk Factors</summary>
+                <div class="dropdown-content">
+                    <div class="resource-grid">
+                        <details class="sub-dropdown">
+                            <summary>
+                                <span>🌿 Chlorophyll</span>
+                                <span class="metric-badge" id="chloro-val">--%</span>
+                            </summary>
+                            <div class="sub-dropdown-content">
+                                Excess nutrients cause algae to rapidly multiply, creating dense surface layers that deplete oxygen and block sunlight — directly threatening salmon habitat.
+                                <br><a href="https://oceanservice.noaa.gov/facts/chlorophyll.html" target="_blank" class="resource-link">Learn more ›</a>
+                            </div>
+                        </details>
+
+                        <details class="sub-dropdown">
+                            <summary>
+                                <span>🌊 Turbidity</span>
+                                <span class="metric-badge" id="turbid-val">--%</span>
+                            </summary>
+                            <div class="sub-dropdown-content">
+                                Cloudy water from sediment and runoff blocks sunlight and disrupts salmon navigation. High turbidity near river mouths often signals environmental stress.
+                                <br><a href="https://www.epa.gov/national-aquatic-resource-surveys/indicators-turbidity" target="_blank" class="resource-link">Learn more ›</a>
+                            </div>
+                        </details>
+
+                        <details class="sub-dropdown">
+                            <summary>
+                                <span>🥤 Microplastics Proxy</span>
+                                <span class="metric-badge" id="plastic-val">--%</span>
+                            </summary>
+                            <div class="sub-dropdown-content">
+                                Estimated from turbidity and water coverage. Algae attaches to microplastic waste, concentrating toxins in fish feeding zones along migration corridors.
+                                <br><a href="https://www.unep.org/plastic-pollution" target="_blank" class="resource-link">Learn more ›</a>
+                            </div>
+                        </details>
+                    </div>
+                </div>
+            </details>
+
+            <details class="dropdown-container" name="dashboard-menus">
+                <summary>❓ Help & Documentation</summary>
+                <div class="dropdown-content">
+                    <p style="margin: 0 0 8px 0;"><strong style="color: #fff;">What is this map?</strong><br>
+                    Real-time risk monitoring for Atlantic salmon on the Newfoundland coast using Sentinel-2 satellite imagery.</p>
+                    <p style="margin: 0 0 8px 0;"><strong style="color: #fff;">🐟 Salmon Paths:</strong><br>
+                    Animated gold lines trace migration corridors through Trinity Bay, NL.</p>
+                    <p style="margin: 0;"><strong style="color: #fff;">Coloured tiles:</strong><br>
+                    Blue → low risk. Yellow → elevated. Red → high. Click any tile for details.</p>
+                </div>
+            </details>
+        </div>
+    </div>
+
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+    <script>
+        const params = new URLSearchParams(window.location.search);
+        const API_BASE = params.get("api") || "http://127.0.0.1:8000";
+        const DEFAULT_SCENE_ID = params.get("scene_id") || "";
+        const DEFAULT_SOURCE = (params.get("source") || "rule").toLowerCase();
+        const MODEL_CHECKPOINT = params.get("checkpoint");
+        const GRID_BLOCK_SIZE = Number(params.get("grid_block_size") || 8);
+
+        const DEFAULT_THRESHOLDS = {
+            yellow: 0.30,
+            red: 0.65,
+            infrared: 0.85
+        };
+
+        const state = {
+            useModelSource: DEFAULT_SOURCE !== "rule",
+            sceneId: DEFAULT_SCENE_ID,
+            modelCheckpoint: MODEL_CHECKPOINT,
+            lastProcessedSceneId: null,
+            lastPredictionId: null,
+            lastFeatureCollection: null,
+            thresholds: { ...DEFAULT_THRESHOLDS },
+            salmonVisible: true,
+            migrationPathCount: 0,
+            migrationPathSegments: [],
+            hasFitBounds: false,
+            lowContrastWarning: false,
+            waterDetectionMethod: null,
+            visualScale: { min: 0, max: 1, p10: 0, p90: 1 },
+            factorMetrics: {
+                chlorophyllPct: 0,
+                turbidityPct: 0,
+                floatingPlasticPct: 0,
+                waterCoveragePct: 0,
+                avgRiskPct: 0
+            }
+        };
+
+        const map = L.map("map").setView([48.4, -53.6], 8);
+        L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png").addTo(map);
+
+        const salmonLayerGroup = L.layerGroup().addTo(map);
+        let riskGridLayer = null;
+        let heatLayer = null;
+
+        function setConnectionStatus(message, kind = "info") {
+            const el = document.getElementById("connection-status");
+            const color = kind === "error" ? "#ff4d4d" : kind === "warn" ? "#f1c232" : "#8ad3ff";
+            el.textContent = message;
+            el.style.color = color;
+        }
+
+        function mean(values) {
+            if (!values.length) return 0;
+            let sum = 0;
+            for (const v of values) sum += v;
+            return sum / values.length;
+        }
+
+        function percentile(values, q) {
+            if (!values.length) return 0;
+            if (values.length === 1) return values[0];
+            const sorted = [...values].sort((a, b) => a - b);
+            const index = (sorted.length - 1) * q;
+            const lower = Math.floor(index);
+            const upper = Math.ceil(index);
+            if (lower === upper) return sorted[lower];
+            return sorted[lower] * (1 - (index - lower)) + sorted[upper] * (index - lower);
+        }
+
+        function parseJson(response) {
+            if (!response.ok) {
+                return response.text().then((body) => { throw new Error(`HTTP ${response.status}: ${body}`); });
+            }
+            return response.json();
+        }
+
+        function isSceneBootstrapError(error) {
+            const msg = String(error?.message || "").toLowerCase();
+            return (
+                msg.includes("scene not found") ||
+                msg.includes("no processed scenes found") ||
+                msg.includes("asset path not found") ||
+                msg.includes("band asset not found") ||
+                msg.includes("scene assets are missing on disk") ||
+                msg.includes("no such file or directory")
+            );
+        }
+
+        async function ingestDefaultScene() {
+            const payload = {
+                provider: "local",
+                local: { scene_name: "frontend-demo-scene", scene_dir: "data/sample" }
+            };
+            const response = await fetch(`${API_BASE}/ingest/sentinel`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
+            });
+            const ingest = await parseJson(response);
+            state.sceneId = ingest.scene_id;
+            state.lastProcessedSceneId = null;
+            state.lastPredictionId = null;
+            return ingest;
+        }
+
+        function clamp(value, min, max) {
+            return Math.min(max, Math.max(min, value));
+        }
+
+        function computeVisualScale(features) {
+            const risks = [];
+            for (const f of features) {
+                const s = Number(f?.properties?.risk_score);
+                if (Number.isFinite(s)) risks.push(s);
+            }
+            if (!risks.length) return { min: 0, max: 1, p10: 0, p90: 1 };
+            return {
+                min: Math.min(...risks),
+                max: Math.max(...risks),
+                p10: percentile(risks, 0.10),
+                p90: percentile(risks, 0.90)
+            };
+        }
+
+        function normalizedRiskForDisplay(score) {
+            if (!Number.isFinite(score)) return 0;
+            let low = state.visualScale.p10;
+            let high = state.visualScale.p90;
+            if (!Number.isFinite(low) || !Number.isFinite(high) || high - low < 1e-8) {
+                low = state.visualScale.min;
+                high = state.visualScale.max;
+            }
+            if (!Number.isFinite(low) || !Number.isFinite(high) || high - low < 1e-8) {
+                return clamp(score, 0, 1);
+            }
+            return clamp((score - low) / (high - low), 0, 1);
+        }
+
+        function interpolateColor(colorA, colorB, t) {
+            const a = colorA.replace("#", "");
+            const b = colorB.replace("#", "");
+            const ar = parseInt(a.slice(0, 2), 16), ag = parseInt(a.slice(2, 4), 16), ab = parseInt(a.slice(4, 6), 16);
+            const br = parseInt(b.slice(0, 2), 16), bg = parseInt(b.slice(2, 4), 16), bb = parseInt(b.slice(4, 6), 16);
+            const r = Math.round(ar + (br - ar) * t);
+            const g = Math.round(ag + (bg - ag) * t);
+            const bv = Math.round(ab + (bb - ab) * t);
+            return `#${r.toString(16).padStart(2,"0")}${g.toString(16).padStart(2,"0")}${bv.toString(16).padStart(2,"0")}`;
+        }
+
+        function colorForNormalizedRisk(normalized) {
+            const n = clamp(normalized, 0, 1);
+            if (n <= 0.4) return interpolateColor("#00d4ff", "#f1c232", n / 0.4);
+            if (n <= 0.8) return interpolateColor("#f1c232", "#ff4d4d", (n - 0.4) / 0.4);
+            return interpolateColor("#ff4d4d", "#ff00ff", (n - 0.8) / 0.2);
+        }
+
+        function normalizeChlorophyll(value) {
+            if (!Number.isFinite(value)) return 0;
+            return clamp((value + 1) / 2, 0, 1);
+        }
+
+        function normalizeTurbidity(value) {
+            if (!Number.isFinite(value)) return 0;
+            const OCEAN_BASELINE = 0.40;
+            return clamp((value - OCEAN_BASELINE) / 0.90, 0, 1);
+        }
+
+        function estimateFloatingPlastic(turbidityNorm, waterCoverageNorm, avgRiskNorm) {
+            return clamp(0.55 * turbidityNorm + 0.25 * waterCoverageNorm + 0.20 * avgRiskNorm, 0, 1);
+        }
+
+        function centroidFromPolygon(feature) {
+            const geometry = feature?.geometry;
+            if (!geometry) return null;
+            let ring = null;
+            if (geometry.type === "Polygon") ring = geometry.coordinates?.[0];
+            else if (geometry.type === "MultiPolygon") ring = geometry.coordinates?.[0]?.[0];
+            else if (geometry.type === "Point") {
+                const p = geometry.coordinates;
+                return Array.isArray(p) ? [p[1], p[0]] : null;
+            }
+            if (!Array.isArray(ring) || ring.length < 3) return null;
+            let lng = 0, lat = 0, count = 0;
+            for (const coord of ring) {
+                if (!Array.isArray(coord) || coord.length < 2) continue;
+                lng += coord[0]; lat += coord[1]; count++;
+            }
+            if (!count) return null;
+            return [lat / count, lng / count];
+        }
+
+        function categoryFromScore(score, thresholds) {
+            if (!Number.isFinite(score) || score <= 0) return "blue";
+            if (score >= (thresholds.infrared ?? 0.85)) return "infrared";
+            if (score >= (thresholds.red ?? 0.65)) return "red";
+            if (score >= (thresholds.yellow ?? 0.30)) return "yellow";
+            return "blue";
+        }
+
+        function colorForCategory(category) {
+            if (category === "infrared") return "#ff00ff";
+            if (category === "red") return "#ff4d4d";
+            if (category === "yellow") return "#f1c232";
+            return "#00d4ff";
+        }
+
+        const CATEGORY_LABELS = { blue: "Low Risk", yellow: "Elevated", red: "High Risk", infrared: "Critical" };
+
+        // ~3 km ribbon either side of each path segment at ~48°N
+        const ROUTE_BUFFER_DEG = 0.03;
+
+        function distToSegDeg(plat, plng, lat1, lng1, lat2, lng2) {
+            const coslat = Math.cos(plat * Math.PI / 180);
+            const px = plng * coslat, py = plat;
+            const x1 = lng1 * coslat, y1 = lat1;
+            const x2 = lng2 * coslat, y2 = lat2;
+            const dx = x2 - x1, dy = y2 - y1;
+            const len2 = dx * dx + dy * dy;
+            if (len2 === 0) {
+                const ddx = px - x1, ddy = py - y1;
+                return Math.sqrt(ddx * ddx + ddy * ddy);
+            }
+            const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / len2));
+            const nx = x1 + t * dx, ny = y1 + t * dy;
+            return Math.sqrt((px - nx) ** 2 + (py - ny) ** 2);
+        }
+
+        function isNearRoute(lat, lng) {
+            if (!state.migrationPathSegments.length) return true;
+            for (const [lat1, lng1, lat2, lng2] of state.migrationPathSegments) {
+                if (distToSegDeg(lat, lng, lat1, lng1, lat2, lng2) <= ROUTE_BUFFER_DEG) return true;
+            }
+            return false;
+        }
+
+        function buildTilePopupHtml(props) {
+            const score = Number(props.risk_score ?? 0);
+            const waterFraction = Number(props.water_fraction ?? 0);
+            const chlorophyll = Number(props.chlorophyll_index_mean ?? 0);
+            const turbidity = Number(props.turbidity_index_mean ?? 0);
+            const category = props.risk_category || categoryFromScore(score, state.thresholds);
+            const label = CATEGORY_LABELS[category] || category;
+            const scorePct = (score * 100).toFixed(1);
+            const waterPct = (waterFraction * 100).toFixed(1);
+            const chlPct = (normalizeChlorophyll(chlorophyll) * 100).toFixed(1);
+            const turbNorm = clamp(normalizeTurbidity(turbidity), 0, 1);
+            const turbPct = (turbNorm * 100).toFixed(1);
+            const plasticPct = (estimateFloatingPlastic(turbNorm, 0, score) * 100).toFixed(1);
+            return `<div>
+                <div class="popup-header risk-${category}">
+                    <span class="popup-category">${label}</span>
+                    <span class="popup-score">${scorePct}%</span>
+                </div>
+                <div class="popup-body">
+                    <div class="popup-row"><span class="popup-label">Chlorophyll Spike</span><span class="popup-val">${chlPct}%</span></div>
+                    <div class="popup-row"><span class="popup-label">Turbidity Spike</span><span class="popup-val">${turbPct}%</span></div>
+                    <div class="popup-row"><span class="popup-label">Microplastics Spike (est.)</span><span class="popup-val">${plasticPct}%</span></div>
+                </div>
+            </div>`;
+        }
+
+        function styleRiskFeature(feature) {
+            const props = feature?.properties || {};
+            const score = Number(props.risk_score);
+            const waterFraction = Number(props.water_fraction);
+            const waterDetected = Boolean(props.water_detected) && Number.isFinite(waterFraction) && waterFraction > 0;
+
+            if (!waterDetected) {
+                return { opacity: 0, fillOpacity: 0, weight: 0 };
+            }
+
+            // Only render tiles along migration corridors
+            const center = centroidFromPolygon(feature);
+            if (center && !isNearRoute(center[0], center[1])) {
+                return { opacity: 0, fillOpacity: 0, weight: 0 };
+            }
+
+            const yellowThreshold = state.thresholds.yellow ?? 0.30;
+            const isElevated = score >= yellowThreshold;
+            const category = props.risk_category || categoryFromScore(score, state.thresholds);
+            const fillColor = colorForCategory(category);
+
+            return {
+                color: fillColor,
+                weight: isElevated ? 1.5 : 0,
+                opacity: isElevated ? 1.0 : 0,
+                fillColor,
+                fillOpacity: isElevated ? 0.72 : 0
+            };
+        }
+
+        function renderRiskGrid(featureCollection) {
+            if (riskGridLayer) {
+                map.removeLayer(riskGridLayer);
+                riskGridLayer = null;
+            }
+            riskGridLayer = L.geoJSON(featureCollection, {
+                style: styleRiskFeature,
+                onEachFeature: (feature, layer) => {
+                    const props = feature?.properties || {};
+                    if (!Boolean(props.water_detected)) return;
+                    const center = centroidFromPolygon(feature);
+                    if (center && !isNearRoute(center[0], center[1])) return;
+                    layer.bindPopup(buildTilePopupHtml(props), { maxWidth: 260 });
+                }
+            }).addTo(map);
+        }
+
+        function renderHeatmapFromRisk(featureCollection) {
+            if (heatLayer) { map.removeLayer(heatLayer); heatLayer = null; }
+            if (!state.useModelSource || map.getZoom() < 11) return;
+
+            const points = [];
+            for (const feature of (featureCollection?.features || [])) {
+                const center = centroidFromPolygon(feature);
+                if (!center) continue;
+                const waterFraction = Number(feature?.properties?.water_fraction);
+                const waterDetected = Boolean(feature?.properties?.water_detected);
+                if (!waterDetected || !Number.isFinite(waterFraction) || waterFraction <= 0) continue;
+                const score = Number(feature?.properties?.risk_score);
+                if (!Number.isFinite(score)) continue;
+                points.push([center[0], center[1], normalizedRiskForDisplay(score)]);
+            }
+            if (!points.length) return;
+
+            const zoom = map.getZoom();
+            const radius = Math.round(clamp(10 + (zoom - 8) * 2.2, 10, 28));
+            const blur = Math.round(clamp(radius * 0.7, 8, 20));
+            heatLayer = L.heatLayer(points, {
+                radius, blur, maxZoom: 12,
+                gradient: { 0.0: "#00d4ff", 0.30: "#f1c232", 0.65: "#ff4d4d", 0.85: "#ff00ff" }
+            }).addTo(map);
+        }
+
+        function updateRiskIndicator(maxRisk) {
+            const indicator = document.getElementById("risk-indicator");
+            const y = state.thresholds.yellow ?? 0.30;
+            const r = state.thresholds.red ?? 0.65;
+            const ir = state.thresholds.infrared ?? 0.85;
+            if (maxRisk >= ir) { indicator.textContent = "INFRARED ALERT"; indicator.className = "risk-status status-high"; return; }
+            if (maxRisk >= r)  { indicator.textContent = "HIGH RISK";       indicator.className = "risk-status status-high"; return; }
+            if (maxRisk >= y)  { indicator.textContent = "ELEVATED RISK";   indicator.className = "risk-status status-medium"; return; }
+            indicator.textContent = "LOW RISK";
+            indicator.className = "risk-status status-low";
+        }
+
+        function updateBadgeColor(id, pct) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.style.color = pct >= 50 ? "var(--risk-high)" : pct >= 20 ? "var(--risk-mid)" : "var(--risk-low)";
+        }
+
+        function updateDashboardFromFeatures(features) {
+            const scores = [], chlorophyll = [], turbidity = [], waterFractions = [];
+            let wRiskSum = 0, wRiskDenom = 0;
+
+            for (const f of features) {
+                const p = f?.properties || {};
+                const risk = Number(p.risk_score);
+                const ch = Number(p.chlorophyll_index_mean);
+                const turb = Number(p.turbidity_index_mean);
+                const water = Number(p.water_fraction);
+                const wPx = Number(p.water_pixel_count);
+                const px = Number(p.pixel_count);
+
+                const isWater = Boolean(p.water_detected);
+                if (Number.isFinite(risk)) scores.push(risk);
+                if (Number.isFinite(ch) && isWater) chlorophyll.push(ch);
+                if (Number.isFinite(turb) && isWater) turbidity.push(turb);
+                if (Number.isFinite(water)) waterFractions.push(water);
+                if (Number.isFinite(risk)) {
+                    const ew = Number.isFinite(wPx) && wPx > 0 ? wPx
+                        : (Number.isFinite(water) && Number.isFinite(px) && px > 0 ? water * px : 0);
+                    wRiskSum += risk * ew;
+                    wRiskDenom += ew;
+                }
+            }
+
+            const avgRisk = wRiskDenom > 0 ? wRiskSum / wRiskDenom : mean(scores);
+            const maxRisk = scores.length ? Math.max(...scores) : 0;
+            const waterCoverage = mean(waterFractions);
+            const waterStd = waterFractions.length
+                ? Math.sqrt(waterFractions.reduce((a, v) => a + (v - waterCoverage) ** 2, 0) / waterFractions.length)
+                : 0;
+
+            const chlNorm = normalizeChlorophyll(mean(chlorophyll));
+            const turbNorm = normalizeTurbidity(mean(turbidity));
+            const plasticNorm = estimateFloatingPlastic(turbNorm, clamp(waterCoverage, 0, 1), clamp(avgRisk, 0, 1));
+
+            state.factorMetrics = {
+                chlorophyllPct: chlNorm * 100,
+                turbidityPct: turbNorm * 100,
+                floatingPlasticPct: plasticNorm * 100,
+                waterCoveragePct: clamp(waterCoverage, 0, 1) * 100,
+                avgRiskPct: clamp(avgRisk, 0, 1) * 100
+            };
+
+            document.getElementById("bloom-density").textContent = `${(avgRisk * 100).toFixed(1)}%`;
+            document.getElementById("chloro-val").textContent = `${(chlNorm * 100).toFixed(1)}%`;
+            document.getElementById("turbid-val").textContent = `${(turbNorm * 100).toFixed(1)}%`;
+            document.getElementById("plastic-val").textContent = `${(plasticNorm * 100).toFixed(1)}%`;
+
+            updateBadgeColor("chloro-val", chlNorm * 100);
+            updateBadgeColor("turbid-val", turbNorm * 100);
+            updateBadgeColor("plastic-val", plasticNorm * 100);
+
+            updateRiskIndicator(maxRisk);
+            state.lowContrastWarning = waterFractions.length > 50 && waterStd < 0.04;
+        }
+
+        async function loadMigrationPaths() {
+            salmonLayerGroup.clearLayers();
+            try {
+                const response = await fetch(`${API_BASE}/migration-paths/geojson`);
+                const geojson = await parseJson(response);
+                const layer = L.geoJSON(geojson, {
+                    style: {
+                        color: "gold",
+                        weight: 3,
+                        opacity: 0.9,
+                        dashArray: "10, 10",
+                        className: "salmon-path"
+                    },
+                    onEachFeature: (feature, layerRef) => {
+                        const name = feature?.properties?.name || feature?.id || "Migration Path";
+                        layerRef.bindPopup(`<div style="padding:6px 4px;font-weight:bold;color:#f1c232;">${name}</div>`, { maxWidth: 220 });
+                    }
+                });
+                layer.eachLayer((entry) => salmonLayerGroup.addLayer(entry));
+                state.migrationPathCount = Array.isArray(geojson?.features) ? geojson.features.length : 0;
+                state.migrationPathSegments = [];
+                for (const f of (geojson?.features || [])) {
+                    const coords = f?.geometry?.coordinates;
+                    if (Array.isArray(coords) && coords.length >= 2) {
+                        for (let i = 0; i < coords.length - 1; i++) {
+                            const [lng1, lat1] = coords[i];
+                            const [lng2, lat2] = coords[i + 1];
+                            state.migrationPathSegments.push([lat1, lng1, lat2, lng2]);
+                        }
+                    }
+                }
+            } catch (error) {
+                state.migrationPathCount = 0;
+                setConnectionStatus(`Migration path load failed: ${error.message}`, "warn");
+            }
+        }
+
+        async function fetchRuleTiles() {
+            state.waterDetectionMethod = null;
+            const load = async () => {
+                if (!state.sceneId) await ingestDefaultScene();
+                const processResponse = await fetch(`${API_BASE}/process/scene`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ scene_id: state.sceneId, include_grid: true, grid_block_size: GRID_BLOCK_SIZE })
+                });
+                const processPayload = await parseJson(processResponse);
+                state.lastProcessedSceneId = processPayload.processed_scene_id;
+                state.waterDetectionMethod = processPayload?.summary?.water_detection_method || null;
+                const responseTiles = await fetch(
+                    `${API_BASE}/risk/tiles?source=rule&processed_scene_id=${encodeURIComponent(state.lastProcessedSceneId)}`
+                );
+                return parseJson(responseTiles);
+            };
+            try { return await load(); }
+            catch (error) {
+                if (!isSceneBootstrapError(error)) throw error;
+                await ingestDefaultScene();
+                return load();
+            }
+        }
+
+        async function fetchModelTiles() {
+            const load = async () => {
+                if (!state.sceneId) await ingestDefaultScene();
+                const predictPayload = {
+                    scene_id: state.sceneId,
+                    include_grid: true,
+                    grid_block_size: GRID_BLOCK_SIZE,
+                    force_recompute: true
+                };
+                if (state.modelCheckpoint) predictPayload.model_checkpoint = state.modelCheckpoint;
+                const predictResponse = await fetch(`${API_BASE}/risk/predict`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(predictPayload)
+                });
+                const predict = await parseJson(predictResponse);
+                state.lastPredictionId = predict.prediction_id;
+                state.waterDetectionMethod = predict?.summary?.water_detection_method || null;
+                const tilesResponse = await fetch(
+                    `${API_BASE}/risk/tiles?source=model&prediction_id=${encodeURIComponent(state.lastPredictionId)}`
+                );
+                return parseJson(tilesResponse);
+            };
+            try { return await load(); }
+            catch (error) {
+                if (!isSceneBootstrapError(error)) throw error;
+                await ingestDefaultScene();
+                return load();
+            }
+        }
+
+        async function loadAndRenderRiskData() {
+            setConnectionStatus("Loading...", "info");
+
+            let payload = null;
+
+            try {
+                payload = await fetchRuleTiles();
+            } catch (primaryError) {
+                try {
+                    payload = await fetchModelTiles();
+                } catch (secondaryError) {
+                    throw new Error(`${primaryError.message}`);
+                }
+            }
+
+            const featureCollection = payload?.features;
+            if (!featureCollection || featureCollection.type !== "FeatureCollection") {
+                throw new Error("Invalid response from server.");
+            }
+            const features = Array.isArray(featureCollection.features) ? featureCollection.features : [];
+            if (!features.length) throw new Error("No data returned.");
+
+            state.thresholds = { ...DEFAULT_THRESHOLDS, ...(payload.thresholds || {}) };
+            state.visualScale = computeVisualScale(features);
+            state.lastFeatureCollection = featureCollection;
+            renderRiskGrid(featureCollection);
+            renderHeatmapFromRisk(featureCollection);
+            updateDashboardFromFeatures(features);
+
+            if (!state.hasFitBounds && riskGridLayer) {
+                const bounds = riskGridLayer.getBounds();
+                if (bounds.isValid()) { map.fitBounds(bounds.pad(0.05)); state.hasFitBounds = true; }
+            }
+
+            setConnectionStatus("Loaded", "info");
+        }
+
+        function toggleSalmon() {
+            if (map.hasLayer(salmonLayerGroup)) {
+                map.removeLayer(salmonLayerGroup);
+                state.salmonVisible = false;
+            } else {
+                map.addLayer(salmonLayerGroup);
+                state.salmonVisible = true;
+            }
+        }
+
+        async function refreshLive() {
+            try { await loadAndRenderRiskData(); }
+            catch (error) { setConnectionStatus("Error", "error"); }
+        }
+
+        window.toggleSalmon = toggleSalmon;
+        window.refreshLive = refreshLive;
+
+        map.on("zoomend", () => {
+            if (state.lastFeatureCollection) renderHeatmapFromRisk(state.lastFeatureCollection);
+        });
+
+        (async () => {
+            await loadMigrationPaths();
+            await refreshLive();
+        })();
+    </script>
+</body>
+</html>
